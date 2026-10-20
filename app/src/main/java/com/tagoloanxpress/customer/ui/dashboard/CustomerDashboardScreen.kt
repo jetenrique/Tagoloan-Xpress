@@ -50,6 +50,8 @@ fun CustomerDashboardScreen(
     customerName: String = "Neil Dairo",
     onCreatePasugoClick: () -> Unit = {},
     onTrackDeliveryClick: () -> Unit = {},
+    onNavigateHistory: () -> Unit = {},
+    onNavigateProfile: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize().background(Cream).statusBarsPadding().navigationBarsPadding()) {
@@ -64,7 +66,7 @@ fun CustomerDashboardScreen(
                         .border(2.dp, Ink, RoundedCornerShape(8.dp)).padding(12.dp, 8.dp),
                     fontWeight = FontWeight.Black,
                 )
-                Box(Modifier.size(40.dp).background(Ink, CircleShape).border(2.dp, Amber, CircleShape))
+                Box(Modifier.size(40.dp).background(Ink, CircleShape).border(2.dp, Amber, CircleShape).clickable(onClick = onNavigateProfile))
             }
             Spacer(Modifier.height(24.dp))
             Text("WELCOME BACK 👋", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -102,7 +104,10 @@ fun CustomerDashboardScreen(
                 }
             }
             Spacer(Modifier.height(28.dp))
-            Text("Active Request", fontSize = 18.sp, fontWeight = FontWeight.Black)
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                Text("Active Request", fontSize = 18.sp, fontWeight = FontWeight.Black)
+                Text("View All", color = Amber, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable(onClick = onNavigateHistory))
+            }
             Spacer(Modifier.height(12.dp))
             Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(12.dp)).border(2.dp, Ink, RoundedCornerShape(12.dp)).padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
