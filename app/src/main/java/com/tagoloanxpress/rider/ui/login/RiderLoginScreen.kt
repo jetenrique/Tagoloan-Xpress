@@ -57,6 +57,7 @@ fun RiderLoginScreen(
                     Spacer(Modifier.height(14.dp)); Text("Rider Sign In", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = RiderInk)
                     Spacer(Modifier.height(6.dp)); Text("Sign in to view and fulfill nearby Pasugo requests.", fontSize = 13.sp, color = Color(0xFF555555), textAlign = TextAlign.Center)
                 }
+                Text("LOCAL UI DEMO • Use any nonempty login. No real authentication.", fontSize = 11.sp, color = RiderInk)
                 Spacer(Modifier.height(24.dp)); FieldLabel("Registered Mobile / Username")
                 Spacer(Modifier.height(6.dp))
                 RiderTextField(identifier, { identifier = it }, "Registered mobile or username", R.drawable.rider_phone, submitted && identifier.isBlank())

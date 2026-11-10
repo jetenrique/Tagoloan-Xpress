@@ -1,0 +1,1919 @@
+diff --git a/RIDER_UPDATE.md b/RIDER_UPDATE.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..defe24fd6c4aaab0f6eb937546ce0def06f17725
+--- /dev/null
++++ b/RIDER_UPDATE.md
+@@ -0,0 +1,68 @@
++# Tagoloan Xpress rider UI update
++
++Prepared against GitHub commit `b8de1bd` on 10 November 2026. This is a local rider prototype, not a backend implementation. Existing customer screens and Gradle versions are preserved.
++
++## Included flows
++
++- Login → dashboard; registration → pending review → explicit demo approval → login → profile photo setup.
++- Available request → details → acceptance → store arrival → receipt and actual cost → delivery → customer arrival → handover proof and confirmations → completion.
++- History filters, trip receipts, receipt/handover image previews, profile photo, vehicle and document editing.
++- Local chat, quick rider updates, notification previews, and user-controlled native SMS composer/dialer.
++- One state model for delivery status, confirmed costs, completed trips and earnings. Records survive app restarts and sign-out.
++
++## Applying the download with Copilot
++
++Extract `Tagoloan-Rider-Update.zip` into a temporary folder. Copy that extracted folder into your Android Studio project, then paste:
++
++```text
++Read Tagoloan-Rider-Update/APPLY_WITH_COPILOT.md and apply the supplied
++rider-ui-update.patch to this project. The implementation is already written;
++do not regenerate the screens. Check that the patch applies before changing
++files. Preserve any newer local work and stop to report conflicts if needed.
++Then run :app:assembleDebug and :app:testDebugUnitTest. With the emulator
++connected, run the two RiderFlowTest instrumentation tests. Report actual
++results separately for compilation, unit tests, and emulator tests.
++```
++
++Do not replace the entire `app` folder with a partial folder. The patch contains all source, resource, manifest, and test changes.
++
++## Verification on your Mac
++
++From the project root:
++
++```sh
++bash gradlew :app:assembleDebug :app:testDebugUnitTest
++bash gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.tagoloanxpress.rider.RiderFlowTest
++```
++
++The instrumentation tests use a separate preferences file and do not reset your normal demo records.
++
++Manual checks:
++
++1. Enter any nonempty rider login. No actual credentials are verified.
++2. Accept the sample request. Verify BUSY status and removal from Available Requests.
++3. Mark store arrival. Enter `195.00`, select/capture a receipt image, and check `₱255.00` total.
++4. Cancel a photo picker and verify the previous selection remains. Back/reopen must retain the draft.
++5. Start delivery. Receipt viewing must now be read-only; the confirmed product cost must not change.
++6. Mark customer arrival. Completion must remain disabled until a readable handover photo and both receipt/payment confirmations are present.
++7. Complete once. History must contain one trip with `₱195.00` product cost, `₱60.00` earnings, and `₱255.00` cash collected. No duplicate fee should be added.
++8. Restart the app, log in again and verify that history remains. Cancel a sign-out dialog during a delivery and verify no draft is cleared.
++9. Check Today/This Week filters, trip photos, profile/vehicle edits, notification actions, local chat and keyboard scrolling.
++10. Test registration separately: all three document photos and valid fields are required. Pending applicants cannot access requests. Only the labeled demo approval control advances the preview.
++
++The app supports one local demo rider profile. Submitting a new application replaces that local demo profile. Finish testing the delivery/history flow before testing registration.
++
++## Design and runtime limits
++
++Screens follow the supplied Figma references. History/trip-log Figma frames are flattened reference images, so their content is rebuilt as native interactive UI. Android device sizes and fonts still require visual comparison on the emulator; pixel-perfect fidelity is not asserted.
++
++The map remains a route placeholder. No live GPS, authentication, password changes, admin approvals, document uploads, payment transfers, FCM delivery, encrypted messaging, or automatic connection failover is implemented. Chat messages are saved locally. SMS/call controls open another app and require a recipient number chosen by you; they do not send or place calls automatically.
++
++Real admin approval must replace the demo approval control before production. Photo attachments are app-private local copies. Clear app data/uninstall removes these local records.
++
++## Verification performed here
++
++- Eight executable JUnit delivery-state tests passed: stage ordering, approval/offline restrictions, valid receipt amounts, required completion evidence, idempotent completion and fee-only earnings.
++- Kotlin/Compose source compilation was checked separately against downloaded Android/Compose libraries. This is supplemental verification, not an Android APK build.
++- Drawable references, new image files and XML were checked for missing/invalid resources.
++- The standard Gradle Android build is blocked in this environment by Gradle/toolchain/plugin dependency resolution. No APK or emulator-runtime success is claimed. Two Compose instrumentation regression tests are supplied for the previously observed nested-scroll crash and cancelled sign-out behavior; they still need to run on your emulator.
+diff --git a/app/src/androidTest/java/com/tagoloanxpress/rider/RiderFlowTest.kt b/app/src/androidTest/java/com/tagoloanxpress/rider/RiderFlowTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..442fe3b262b8df743a5a3b650a3696d45e77e4c3
+--- /dev/null
++++ b/app/src/androidTest/java/com/tagoloanxpress/rider/RiderFlowTest.kt
+@@ -0,0 +1,41 @@
++package com.tagoloanxpress.rider
++
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.ui.test.*
++import androidx.compose.ui.test.junit4.createComposeRule
++import androidx.test.platform.app.InstrumentationRegistry
++import com.tagoloanxpress.rider.model.*
++import com.tagoloanxpress.rider.ui.dashboard.RiderDashboardScreen
++import org.junit.Assert.assertEquals
++import org.junit.Rule
++import org.junit.Test
++
++class RiderFlowTest {
++    @get:Rule val compose = createComposeRule()
++
++    private fun store(initial: RiderState = RiderState()): RiderStore {
++        val context = InstrumentationRegistry.getInstrumentation().targetContext
++        return RiderStore(context, "rider_ui_instrumentation_test").also { store -> store.update { initial } }
++    }
++
++    @Test fun acceptingRequestOpensActiveWithoutNestedScrollCrash() {
++        val store = store()
++        compose.setContent { MaterialTheme { RiderDashboardScreen(store) {} } }
++        compose.onNodeWithText("VIEW REQUEST DETAILS").performScrollTo().performClick()
++        compose.onNodeWithText("ACCEPT PASUGO REQUEST").performScrollTo().performClick()
++        compose.onNodeWithText("YES, ACCEPT REQUEST").performClick()
++        compose.onNodeWithText("Active Pasugo #TGX-8921").assertExists()
++        compose.onNodeWithText("MARK AS ARRIVED AT STORE").performScrollTo().performClick()
++        compose.onNodeWithText("CONTINUE TO RECEIPT").assertExists()
++        compose.runOnIdle { assertEquals(DeliveryStage.BUYING, store.state.stage) }
++    }
++
++    @Test fun cancellingLogoutPreservesActiveDelivery() {
++        val store = store(RiderState(stage = DeliveryStage.TO_STORE))
++        compose.setContent { MaterialTheme { RiderDashboardScreen(store) {} } }
++        compose.onNodeWithContentDescription("Open rider profile").performClick()
++        compose.onNodeWithText("LOG OUT OF RIDER ACCOUNT").performScrollTo().performClick()
++        compose.onNodeWithText("Cancel").performClick()
++        compose.runOnIdle { assertEquals(DeliveryStage.TO_STORE, store.state.stage) }
++    }
++}
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index f9797f483003fdc06a047f82d8615a086255ad92..4387d747382f1b99c0170c651165721f7d9dd3a4 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -11,6 +11,13 @@
+         android:roundIcon="@mipmap/ic_launcher_round"
+         android:supportsRtl="true"
+         android:theme="@style/Theme.TagoloanXpress">
++        <provider
++            android:name="androidx.core.content.FileProvider"
++            android:authorities="${applicationId}.rider.files"
++            android:exported="false"
++            android:grantUriPermissions="true">
++            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/rider_file_paths" />
++        </provider>
+         <activity
+             android:name=".MainActivity"
+             android:exported="true"
+@@ -25,4 +32,4 @@
+         </activity>
+     </application>
+ 
+-</manifest>
+\ No newline at end of file
++</manifest>
+diff --git a/app/src/main/java/com/tagoloanxpress/MainActivity.kt b/app/src/main/java/com/tagoloanxpress/MainActivity.kt
+index bc202eaddb33778d7f3dc28d9c68155db0caaf92..d83a019d5a7e88b1745c03df0cfeaa5730b8c0d6 100644
+--- a/app/src/main/java/com/tagoloanxpress/MainActivity.kt
++++ b/app/src/main/java/com/tagoloanxpress/MainActivity.kt
+@@ -33,8 +33,7 @@ import com.tagoloanxpress.customer.ui.profile.CustomerProfileScreen
+ import com.tagoloanxpress.customer.ui.receipt.CustomerReceiptReviewScreen
+ import com.tagoloanxpress.customer.ui.receipt.CustomerViewReceiptScreen
+ import com.tagoloanxpress.customer.ui.tracking.CustomerActiveTrackingScreen
+-import com.tagoloanxpress.rider.ui.login.RiderLoginScreen
+-import com.tagoloanxpress.rider.ui.dashboard.RiderDashboardScreen
++import com.tagoloanxpress.rider.RiderPortal
+ import com.tagoloanxpress.ui.welcome.WelcomePortalScreen
+ 
+ class MainActivity : ComponentActivity() {
+@@ -47,7 +46,7 @@ class MainActivity : ComponentActivity() {
+ 
+ @Composable
+ private fun TagoloanApp() {
+-    var screen by remember { mutableStateOf("welcome") }
++    var screen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("welcome") }
+     var login by remember { mutableStateOf(CustomerLoginUiState()) }
+     var registration by remember { mutableStateOf(CustomerRegistrationUiState()) }
+     var step1 by remember { mutableStateOf(CreatePasugoStep1UiState()) }
+@@ -62,23 +61,7 @@ private fun TagoloanApp() {
+             onRiderClick = { screen = "rider_login" },
+             onAdminClick = {},
+         )
+-        "rider_login" -> RiderLoginScreen(
+-            onBackClick = { screen = "welcome" },
+-            onDemoLoginClick = { screen = "rider_dashboard" },
+-            onRegisterClick = {
+-                coroutineScope.launch {
+-                    snackbarHostState.showSnackbar("Rider registration is coming next.")
+-                }
+-            },
+-            onForgotPasswordClick = {
+-                coroutineScope.launch {
+-                    snackbarHostState.showSnackbar("Password recovery requires backend integration.")
+-                }
+-            },
+-        )
+-        "rider_dashboard" -> RiderDashboardScreen(
+-            onLogoutClick = { screen = "rider_login" },
+-        )
++        "rider_login" -> RiderPortal(onExit = { screen = "welcome" })
+         "customer_login" -> CustomerLoginScreen(
+             state = login,
+             onIdentifierChange = { login = login.copy(identifier = it) },
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/RiderPortal.kt b/app/src/main/java/com/tagoloanxpress/rider/RiderPortal.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..7ede182f5412ee7c3eb979bf728b45b21920bc0b
+--- /dev/null
++++ b/app/src/main/java/com/tagoloanxpress/rider/RiderPortal.kt
+@@ -0,0 +1,44 @@
++package com.tagoloanxpress.rider
++
++import androidx.compose.runtime.*
++import androidx.compose.runtime.saveable.rememberSaveable
++import androidx.compose.ui.platform.LocalContext
++import com.tagoloanxpress.rider.model.*
++import com.tagoloanxpress.rider.ui.dashboard.RiderDashboardScreen
++import com.tagoloanxpress.rider.ui.login.RiderLoginScreen
++import com.tagoloanxpress.rider.ui.onboarding.*
++import com.tagoloanxpress.rider.ui.shared.*
++
++@Composable
++fun RiderPortal(onExit: () -> Unit) {
++    val context = LocalContext.current.applicationContext
++    val store = remember(context) { RiderStore(context) }
++    var route by rememberSaveable { mutableStateOf("login") }
++    when (route) {
++        "application" -> RiderApplicationScreen(store, { route = "pending" }, { route = "login" })
++        "pending" -> RiderVerificationScreen(store, { route = "approved" }, { route = "login" })
++        "approved" -> RiderApprovedScreen(store) { route = "login" }
++        "setup" -> RiderProfileSetupScreen(store, { route = "dashboard" }, { route = "login" })
++        "dashboard" -> when {
++            store.state.approval != Approval.APPROVED -> RiderVerificationScreen(store, { route = "approved" }, { route = "login" })
++            !store.state.profileReady -> RiderProfileSetupScreen(store, { route = "dashboard" }, { route = "login" })
++            else -> RiderDashboardScreen(store) { route = "login" }
++        }
++        "recovery" -> RiderPage("Password Recovery", { route = "login" }) {
++            TxPanel { TxTitle("Authentication is not connected"); TxText("The current app is a UI demo. Real password resets require the account backend. No recovery email or SMS has been sent.") }
++            TxButton("RETURN TO RIDER LOGIN") { route = "login" }
++        }
++        else -> RiderLoginScreen(
++            onBackClick = onExit,
++            onDemoLoginClick = {
++                route = when {
++                    store.state.approval == Approval.PENDING -> "pending"
++                    !store.state.profileReady -> "setup"
++                    else -> "dashboard"
++                }
++            },
++            onRegisterClick = { route = "application" },
++            onForgotPasswordClick = { route = "recovery" },
++        )
++    }
++}
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/model/RiderState.kt b/app/src/main/java/com/tagoloanxpress/rider/model/RiderState.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..94cebb0e6986948e24037d28d980f171ed02278c
+--- /dev/null
++++ b/app/src/main/java/com/tagoloanxpress/rider/model/RiderState.kt
+@@ -0,0 +1,71 @@
++package com.tagoloanxpress.rider.model
++
++import java.math.BigDecimal
++import java.util.Locale
++
++enum class DeliveryStage { AVAILABLE, DECLINED, TO_STORE, BUYING, DELIVERING, AT_CUSTOMER, COMPLETED }
++enum class Approval { APPROVED, PENDING }
++
++data class CompletedTrip(
++    val id: String,
++    val productCost: Long,
++    val fee: Long,
++    val receipt: String,
++    val handover: String,
++    val completedAt: Long,
++) { val total: Long get() = productCost + fee }
++
++/** Device-local UI demo. No authentication, payment transfer, or server approval. */
++data class RiderState(
++    val name: String = "Juan Dela Cruz",
++    val mobile: String = "0917 123 4567",
++    val username: String = "juan.demo",
++    val plate: String = "ABC 1234",
++    val vehicle: String = "Motorcycle",
++    val photo: String = "",
++    val documents: List<String> = listOf("", "", ""),
++    val approval: Approval = Approval.APPROVED,
++    val profileReady: Boolean = true,
++    val accepting: Boolean = true,
++    val stage: DeliveryStage = DeliveryStage.AVAILABLE,
++    val draftCost: String = "",
++    val receipt: String = "",
++    val confirmedCost: Long = 0,
++    val handover: String = "",
++    val receiptHandedOver: Boolean = false,
++    val cashCollected: Boolean = false,
++    val trips: List<CompletedTrip> = emptyList(),
++    val messages: List<String> = emptyList(),
++    val notificationsRead: Boolean = false,
++) {
++    val busy: Boolean get() = stage in setOf(DeliveryStage.TO_STORE, DeliveryStage.BUYING, DeliveryStage.DELIVERING, DeliveryStage.AT_CUSTOMER)
++    val available: Boolean get() = approval == Approval.APPROVED && profileReady && accepting && stage == DeliveryStage.AVAILABLE
++    val total: Long get() = confirmedCost + FEE
++    val earnings: Long get() = trips.sumOf { it.fee }
++    val canComplete: Boolean get() = stage == DeliveryStage.AT_CUSTOMER && confirmedCost > 0 && receipt.isNotBlank() && handover.isNotBlank() && receiptHandedOver && cashCollected
++
++    fun accept(): RiderState = if (available) copy(stage = DeliveryStage.TO_STORE) else this
++    fun arriveAtStore(): RiderState = if (stage == DeliveryStage.TO_STORE) copy(stage = DeliveryStage.BUYING) else this
++    fun startDelivery(cost: Long): RiderState = if (stage == DeliveryStage.BUYING && cost in 1..99999999L && receipt.isNotBlank()) copy(confirmedCost = cost, stage = DeliveryStage.DELIVERING) else this
++    fun arriveAtCustomer(): RiderState = if (stage == DeliveryStage.DELIVERING) copy(stage = DeliveryStage.AT_CUSTOMER) else this
++    fun complete(now: Long): RiderState {
++        if (!canComplete || trips.any { it.id == REQUEST_ID }) return this
++        return copy(
++            stage = DeliveryStage.COMPLETED, accepting = true,
++            trips = listOf(CompletedTrip(REQUEST_ID, confirmedCost, FEE, receipt, handover, now)) + trips,
++        )
++    }
++    companion object {
++        const val FEE = 6000L
++        const val REQUEST_ID = "TGX-8921"
++    }
++}
++
++fun parseRiderCentavos(input: String): Long? {
++    val value = input.trim()
++    if (!Regex("""\d{1,6}(\.\d{1,2})?""").matches(value)) return null
++    return try { BigDecimal(value).movePointRight(2).longValueExact().takeIf { it in 1..99999999L } }
++    catch (_: ArithmeticException) { null } catch (_: NumberFormatException) { null }
++}
++
++fun riderMoney(cents: Long): String = "₱" + String.format(Locale.US, "%,d.%02d", cents / 100, cents % 100)
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/model/RiderStore.kt b/app/src/main/java/com/tagoloanxpress/rider/model/RiderStore.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..387c531904e02a2ded995aaf17430e40196f00d0
+--- /dev/null
++++ b/app/src/main/java/com/tagoloanxpress/rider/model/RiderStore.kt
+@@ -0,0 +1,56 @@
++package com.tagoloanxpress.rider.model
++
++import android.content.Context
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.setValue
++import org.json.JSONArray
++import org.json.JSONObject
++
++class RiderStore(context: Context, preferencesName: String = "rider_ui_demo_v1") {
++    private val prefs = context.applicationContext.getSharedPreferences(preferencesName, Context.MODE_PRIVATE)
++    var state by mutableStateOf(read())
++        private set
++
++    fun update(transform: (RiderState) -> RiderState) {
++        val next = transform(state)
++        if (next == state) return
++        state = next
++        val s = JSONObject().apply {
++            put("name", next.name); put("mobile", next.mobile); put("username", next.username)
++            put("plate", next.plate); put("vehicle", next.vehicle); put("photo", next.photo)
++            put("documents", JSONArray(next.documents)); put("approval", next.approval.name)
++            put("profileReady", next.profileReady); put("accepting", next.accepting)
++            put("stage", next.stage.name); put("draftCost", next.draftCost); put("receipt", next.receipt)
++            put("confirmedCost", next.confirmedCost); put("handover", next.handover)
++            put("receiptHandedOver", next.receiptHandedOver); put("cashCollected", next.cashCollected)
++            put("messages", JSONArray(next.messages)); put("notificationsRead", next.notificationsRead)
++            put("trips", JSONArray().apply { next.trips.forEach { t -> put(JSONObject().apply {
++                put("id", t.id); put("productCost", t.productCost); put("fee", t.fee)
++                put("receipt", t.receipt); put("handover", t.handover); put("completedAt", t.completedAt)
++            }) } })
++        }
++        prefs.edit().putString("state", s.toString()).apply()
++    }
++
++    private fun read(): RiderState {
++        val raw = prefs.getString("state", null) ?: return RiderState()
++        return try {
++            val j = JSONObject(raw)
++            fun strings(key: String): List<String> = j.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
++            RiderState(
++                name = j.getString("name"), mobile = j.getString("mobile"), username = j.getString("username"),
++                plate = j.getString("plate"), vehicle = j.getString("vehicle"), photo = j.optString("photo"),
++                documents = strings("documents").let { if (it.size == 3) it else listOf("", "", "") },
++                approval = Approval.valueOf(j.getString("approval")), profileReady = j.getBoolean("profileReady"),
++                accepting = j.getBoolean("accepting"), stage = DeliveryStage.valueOf(j.getString("stage")),
++                draftCost = j.optString("draftCost"), receipt = j.optString("receipt"), confirmedCost = j.optLong("confirmedCost"),
++                handover = j.optString("handover"), receiptHandedOver = j.optBoolean("receiptHandedOver"),
++                cashCollected = j.optBoolean("cashCollected"), messages = strings("messages"), notificationsRead = j.optBoolean("notificationsRead"),
++                trips = j.optJSONArray("trips")?.let { a -> (0 until a.length()).map { i -> a.getJSONObject(i).let { t ->
++                    CompletedTrip(t.getString("id"), t.getLong("productCost"), t.getLong("fee"), t.getString("receipt"), t.getString("handover"), t.getLong("completedAt"))
++                } } } ?: emptyList(),
++            )
++        } catch (_: Exception) { RiderState() }
++    }
++}
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/ui/dashboard/RiderDashboardScreen.kt b/app/src/main/java/com/tagoloanxpress/rider/ui/dashboard/RiderDashboardScreen.kt
+index d4b07ead98b8687efcce3e3f455400e9aef0f4d8..724e073da1dda83f52929baf9c7baca3c15e301c 100644
+--- a/app/src/main/java/com/tagoloanxpress/rider/ui/dashboard/RiderDashboardScreen.kt
++++ b/app/src/main/java/com/tagoloanxpress/rider/ui/dashboard/RiderDashboardScreen.kt
+@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
+ import androidx.compose.foundation.layout.fillMaxWidth
+ import androidx.compose.foundation.layout.height
+ import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.safeDrawingPadding
+ import androidx.compose.foundation.layout.size
+ import androidx.compose.foundation.layout.width
+ import androidx.compose.foundation.rememberScrollState
+@@ -45,6 +46,13 @@ import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.unit.dp
+ import androidx.compose.ui.unit.sp
+ import com.tagoloanxpress.R
++import com.tagoloanxpress.rider.model.*
++import com.tagoloanxpress.rider.ui.shared.*
++import com.tagoloanxpress.rider.ui.delivery.RiderCompletionScreen
++import com.tagoloanxpress.rider.ui.history.*
++import com.tagoloanxpress.rider.ui.profile.*
++import com.tagoloanxpress.rider.ui.messages.*
++import com.tagoloanxpress.rider.ui.onboarding.RiderProfileSetupScreen
+ import com.tagoloanxpress.rider.ui.delivery.RiderActiveDeliveryScreen
+ import com.tagoloanxpress.rider.ui.delivery.RiderRequestDetailsScreen
+ import com.tagoloanxpress.rider.ui.receipt.RiderStoreReceiptScreen
+@@ -55,136 +63,119 @@ private val Cream = Color(0xFFFBF9F1)
+ private val Muted = Color(0xFF504533)
+ 
+ @Composable
+-fun RiderDashboardScreen(onLogoutClick: () -> Unit) {
+-    var accepting by rememberSaveable { mutableStateOf(true) }
++fun RiderDashboardScreen(store: RiderStore, onLogoutClick: () -> Unit) {
++    val s = store.state
+     var tab by rememberSaveable { mutableStateOf("Home") }
+-    var dialog by rememberSaveable { mutableStateOf<String?>(null) }
+-    var showRequestDetails by rememberSaveable { mutableStateOf(false) }
+-    var requestAccepted by rememberSaveable { mutableStateOf(false) }
+-    var requestDeclined by rememberSaveable { mutableStateOf(false) }
+-    var arrivedAtStore by rememberSaveable { mutableStateOf(false) }
+-    var showReceiptScreen by rememberSaveable { mutableStateOf(false) }
+-    var actualCostInput by rememberSaveable { mutableStateOf("") }
+-    var receiptUri by rememberSaveable { mutableStateOf<String?>(null) }
+-    var deliveryStarted by rememberSaveable { mutableStateOf(false) }
+-    var confirmedProductCostCentavos by rememberSaveable { mutableStateOf(0L) }
++    var route by rememberSaveable { mutableStateOf("") }
++    var showLogout by rememberSaveable { mutableStateOf(false) }
++    var selectedTrip by rememberSaveable { mutableStateOf("") }
+ 
+-    if (showReceiptScreen) {
+-        RiderStoreReceiptScreen(
+-            actualCostInput = actualCostInput,
+-            onActualCostChange = { actualCostInput = it },
+-            receiptUri = receiptUri,
+-            onReceiptUriChange = { receiptUri = it },
+-            onBackClick = { showReceiptScreen = false },
+-            onStartDelivery = {
+-                confirmedProductCostCentavos = it
+-                deliveryStarted = true
+-                showReceiptScreen = false
+-                tab = "Active"
+-            },
+-        )
+-        return
+-    }
+-    if (showRequestDetails) {
+-        RiderRequestDetailsScreen(
+-            onBackClick = { showRequestDetails = false },
+-            onAccepted = {
+-                requestAccepted = true
+-                showRequestDetails = false
+-                tab = "Active"
+-            },
+-            onDeclined = {
+-                requestDeclined = true
+-                showRequestDetails = false
+-            },
+-        )
+-        return
++    when (route) {
++        "receipt" -> {
++            if (s.stage == DeliveryStage.BUYING) RiderStoreReceiptScreen(
++                actualCostInput = s.draftCost,
++                onActualCostChange = { value -> store.update { it.copy(draftCost = value) } },
++                receiptUri = s.receipt.ifBlank { null },
++                onReceiptUriChange = { value -> store.update { it.copy(receipt = value.orEmpty()) } },
++                onBackClick = { route = "" },
++                onStartDelivery = { cost -> store.update { it.startDelivery(cost) }; route = ""; tab = "Active" },
++            ) else RiderPage("Confirmed Store Receipt", { route = "" }) {
++                TxPanel { TxRow("Product cost", riderMoney(s.confirmedCost)); TxRow("Delivery fee", riderMoney(RiderState.FEE)); TxRow("COD total", riderMoney(s.total)); LocalPhoto(s.receipt, 320) }
++                TxCaption("This confirmed receipt cannot be edited after starting delivery.")
++            }
++            return
++        }
++        "details" -> {
++            RiderRequestDetailsScreen(
++                onBackClick = { route = "" },
++                onAccepted = { store.update { it.accept() }; route = ""; tab = "Active" },
++                onDeclined = { store.update { if (it.available) it.copy(stage = DeliveryStage.DECLINED) else it }; route = "" },
++            )
++            return
++        }
++        "trip" -> {
++            val trip = s.trips.find { it.id == selectedTrip }
++            if (trip != null) RiderTripScreen(trip) { route = "" }
++            else RiderPage("Trip unavailable", { route = "" }) { TxText("This trip is no longer recorded on this device.") }
++            return
++        }
++        "vehicle" -> { RiderVehicleScreen(store) { route = "" }; return }
++        "photo" -> { RiderProfileSetupScreen(store, { route = "" }, { route = "" }); return }
++        "security" -> {
++            RiderPage("Account Security", { route = "" }) {
++                TxPanel { TxTitle("Demo account"); TxText("This prototype does not store a login password. Password changes and password recovery require the authentication backend."); TxCaption("Your photos and delivery records are stored on this device. Signing out keeps them for your next demo session.") }
++                TxButton("BACK TO PROFILE", white = true) { route = "" }
++            }
++            return
++        }
++        "chat" -> { RiderChatScreen(store, { route = "" }, { route = "fallback" }); return }
++        "fallback" -> { RiderFallbackScreen { route = if (s.busy) "chat" else "" }; return }
++        "notifications" -> {
++            RiderNotificationsScreen(store, { route = "" }, { route = "details" }, { route = ""; tab = if (s.busy) "Active" else "History" })
++            return
++        }
+     }
+-    BackHandler { if (tab == "Home") dialog = "Sign out" else tab = "Home" }
+-    Column(Modifier.fillMaxSize().background(Cream)) {
++    BackHandler { if (tab == "Home") showLogout = true else tab = "Home" }
++    Column(Modifier.fillMaxSize().background(Cream).safeDrawingPadding()) {
+         Row(Modifier.fillMaxWidth().padding(16.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+-            Column { Text("RIDER PORTAL", fontSize = 18.sp, fontWeight = FontWeight.Bold); Text(tab, color = Muted, fontSize = 11.sp) }
++            Column(Modifier.weight(1f)) { Text("RIDER PORTAL", fontSize = 18.sp, fontWeight = FontWeight.Bold); Text(tab, color = Muted, fontSize = 11.sp) }
++            TextButton(onClick = { route = "notifications" }) { Text(if (s.notificationsRead) "Alerts" else "Alerts •") }
+             Image(painterResource(R.drawable.rider_dashboard_avatar), "Open rider profile", modifier = Modifier.size(36.dp).clip(CircleShape).border(2.dp, Amber, CircleShape).clickable { tab = "Profile" }, contentScale = ContentScale.Crop)
+         }
+         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+-            Text("UI DEMO • Sample rider and requests", fontSize = 11.sp, color = Muted)
++            Text("UI DEMO • Records stay on this device", fontSize = 11.sp, color = Muted)
+             when (tab) {
+                 "Home" -> {
+-                    Identity()
++                    Column { Identity(s.name, s.busy, s.accepting) }
+                     Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
+-                        Stat("Earnings", "₱0.00", "Today", Modifier.weight(1f))
+-                        Stat("Completed", "0", "Deliveries", Modifier.weight(1f))
+-                        Stat("Score", "5.0", "Top Tier", Modifier.weight(1f), R.drawable.rd_star)
++                        Stat("Earnings", riderMoney(s.earnings), "Recorded fees", Modifier.weight(1f))
++                        Stat("Completed", s.trips.size.toString(), "Deliveries", Modifier.weight(1f))
++                        Stat("Score", "5.0", "Sample rating", Modifier.weight(1f), R.drawable.rd_star)
+                     }
+-                    Availability(accepting, requestAccepted) { accepting = !accepting }
+-                    Requests(accepting, !requestAccepted && !requestDeclined) { showRequestDetails = true }
++                    Availability(s.accepting, s.busy) { store.update { if (!it.busy) it.copy(accepting = !it.accepting) else it } }
++                    Requests(s.accepting, s.available) { route = "details" }
++                    if (s.stage == DeliveryStage.DECLINED) TxButton("RESTORE DECLINED SAMPLE REQUEST", white = true) { store.update { it.copy(stage = DeliveryStage.AVAILABLE) } }
+                     Tip()
+                 }
+-                "Requests" -> Requests(accepting, !requestAccepted && !requestDeclined) { showRequestDetails = true }
+-                "Active" -> if (requestAccepted) {
+-                    RiderActiveDeliveryScreen(
+-                        arrivedAtStore = arrivedAtStore,
+-                        deliveryStarted = deliveryStarted,
+-                        productCostCentavos = confirmedProductCostCentavos,
+-                        onArrivedAtStore = { arrivedAtStore = true },
+-                        onOpenReceipt = { showReceiptScreen = true },
++                "Requests" -> Requests(s.accepting, s.available) { route = "details" }
++                "Active" -> when {
++                    s.stage == DeliveryStage.AT_CUSTOMER -> RiderCompletionScreen(store) { tab = "History" }
++                    s.busy -> RiderActiveDeliveryScreen(
++                        arrivedAtStore = s.stage != DeliveryStage.TO_STORE,
++                        deliveryStarted = s.stage == DeliveryStage.DELIVERING,
++                        productCostCentavos = s.confirmedCost,
++                        onArrivedAtStore = { store.update { it.arriveAtStore() } },
++                        onOpenReceipt = { route = "receipt" },
+                         onBackClick = { tab = "Home" },
++                        onArrivedAtCustomer = { store.update { it.arriveAtCustomer() } },
++                        onOpenChat = { route = "chat" },
++                        onOpenFallback = { route = "fallback" },
+                     )
+-                } else InfoCard("No active delivery", "You haven't accepted a request in this demo.")
+-                "History" -> InfoCard("No completed deliveries", "Delivery history will appear here when implemented.")
+-                "Profile" -> {
+-                    InfoCard("Juan • TX-RDR-8924", "Sample rider profile • Misamis Oriental")
+-                    Button({
+-                    requestAccepted = false
+-                    requestDeclined = false
+-                    arrivedAtStore = false
+-                    showReceiptScreen = false
+-                    actualCostInput = ""
+-                    receiptUri = null
+-                    deliveryStarted = false
+-                    confirmedProductCostCentavos = 0L
+-                    accepting = true
+-                    dialog = "Sign out"
+-                    }, colors = ButtonDefaults.buttonColors(containerColor = Ink)) { Text("SIGN OUT OF DEMO") }
++                    else -> InfoCard("No active delivery", "Accepted requests appear here. Completed trips are in History.")
+                 }
++                "History" -> RiderHistoryContent(s.trips) { selectedTrip = it; route = "trip" }
++                "Profile" -> RiderProfileContent(store, { tab = "History" }, { route = "vehicle" }, { route = "photo" }, { route = "security" }, { showLogout = true })
+             }
++            Spacer(Modifier.height(12.dp))
+         }
+         Navigation(tab) { tab = it }
+     }
+-    dialog?.let { title ->
+-        AlertDialog(
+-            onDismissRequest = { dialog = null },
+-            title = { Text(title) },
+-            text = { Text(if (title == "Sign out") "Return to the rider login screen?" else "Minute Burger\nQty: 2 Buy 1 Take 1 Packs\n\nPickup: Minute Burger, Tagoloan Poblacion\nDelivery: Zone 3, Mohon (near Chapel)\nDistance: 2.0 km • Estimated trip: 12 mins\nPayment: Cash on Delivery\nDelivery fee: ₱60.00\n\nSample request only.") },
+-            confirmButton = {
+-                TextButton({
+-                    dialog = null
+-                    if (title == "Sign out") {
+-                        requestAccepted = false
+-                        requestDeclined = false
+-                        arrivedAtStore = false
+-                        showReceiptScreen = false
+-                        actualCostInput = ""
+-                        receiptUri = null
+-                        deliveryStarted = false
+-                        confirmedProductCostCentavos = 0L
+-                        accepting = true
+-                        onLogoutClick()
+-                    }
+-                }) { Text(if (title == "Sign out") "Sign out" else "Close") }
+-            },
+-            dismissButton = { if (title == "Sign out") TextButton({ dialog = null }) { Text("Cancel") } },
+-        )
+-    }
++    if (showLogout) AlertDialog(
++        onDismissRequest = { showLogout = false },
++        title = { Text("Sign out?") },
++        text = { Text("Return to rider login? Your delivery draft and completed trips will remain on this device.") },
++        confirmButton = { TextButton(onClick = { showLogout = false; onLogoutClick() }) { Text("Sign out") } },
++        dismissButton = { TextButton(onClick = { showLogout = false }) { Text("Cancel") } },
++    )
+ }
+ 
+-@Composable private fun Identity() {
++@Composable private fun Identity(name: String, busy: Boolean, accepting: Boolean) {
+     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+         Row(Modifier.dashboardSurface(Amber, 24).padding(10.dp, 6.dp), verticalAlignment = Alignment.CenterVertically) { Asset(R.drawable.rd_badge, 14.dp, 14.dp); Text("TX-RDR-8924", fontSize = 11.sp, color = Muted) }
+         Text("Misamis Oriental", Modifier.weight(1f), fontSize = 11.sp, color = Muted)
+-        Text("Shift Active", fontSize = 11.sp, color = Muted)
++        Text(if (busy) "Busy" else if (accepting) "Shift Active" else "Off duty", fontSize = 11.sp, color = Muted)
+     }
+-    Spacer(Modifier.height(8.dp)); Text("Maayong Adlaw, Juan! 👋", fontSize = 18.sp, fontWeight = FontWeight.Bold); Text("Ready for Tagoloan express dispatches", fontSize = 11.sp, color = Muted)
++    Spacer(Modifier.height(8.dp)); Text("Maayong Adlaw, ${name.substringBefore(' ')}! 👋", fontSize = 18.sp, fontWeight = FontWeight.Bold); Text("Ready for Tagoloan express dispatches", fontSize = 11.sp, color = Muted)
+ }
+ 
+ @Composable private fun Stat(label: String, value: String, caption: String, modifier: Modifier, @DrawableRes icon: Int? = null) {
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/ui/delivery/RiderCompletionScreen.kt b/app/src/main/java/com/tagoloanxpress/rider/ui/delivery/RiderCompletionScreen.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..814c07bd3c03329ef0078ab8ab45a3507d6e3195
+--- /dev/null
++++ b/app/src/main/java/com/tagoloanxpress/rider/ui/delivery/RiderCompletionScreen.kt
+@@ -0,0 +1,65 @@
++package com.tagoloanxpress.rider.ui.delivery
++
++import androidx.compose.foundation.layout.*
++import androidx.compose.material3.*
++import androidx.compose.runtime.*
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.sp
++import androidx.compose.ui.unit.dp
++import com.tagoloanxpress.R
++import com.tagoloanxpress.rider.model.*
++import com.tagoloanxpress.rider.ui.shared.*
++
++/** Plain content. The dashboard owns scrolling. */
++@Composable
++fun RiderCompletionScreen(store: RiderStore, onCompleted: () -> Unit) {
++    val s = store.state
++    val handover = rememberImagePreview(s.handover)
++    val receipt = rememberImagePreview(s.receipt)
++    TxCaption("✓ To Store   →   ✓ Bought   →   AT CUSTOMER")
++    TxPanel(Color(0xFFF5F3EB)) {
++        TxCaption("ARRIVED AT DESTINATION • #${RiderState.REQUEST_ID}")
++        TxTitle("Zone 3, Mohon, Tagoloan")
++        TxText("Deliver to Neil Dairo • Near Mohon Chapel")
++        TxText("Minute Burger (2x Buy 1 Take 1 Packs)")
++    }
++    TxPanel(TxAmber) {
++        TxCaption("COLLECT FROM CUSTOMER • CASH (COD)")
++        Text(riderMoney(s.total), fontSize = 32.sp, fontWeight = FontWeight.Black, color = TxInk)
++        TxRow("Store receipt amount", riderMoney(s.confirmedCost))
++        TxRow("Standard delivery fee", riderMoney(RiderState.FEE))
++        HorizontalDivider(color = TxInk)
++        TxCaption("Demo rider earnings: ${riderMoney(RiderState.FEE)}. No wallet transfer is performed.")
++    }
++    TxPanel {
++        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++            TxAsset(R.drawable.fg_3_3017_imgcontainer6)
++            TxText("Photo with package or customer")
++        }
++        PhotoSelector("Proof of Handover", s.handover, { photo -> store.update { it.copy(handover = photo) } })
++    }
++    TxPanel {
++        TxTitle("COMPLETION VERIFICATION")
++        Row {
++            Checkbox(s.receiptHandedOver, { checked -> store.update { it.copy(receiptHandedOver = checked) } })
++            Column(Modifier.weight(1f)) {
++                TxText("Physical Store Receipt Handed Over")
++                TxCaption("${riderMoney(s.confirmedCost)} Minute Burger slip surrendered")
++            }
++        }
++        Row {
++            Checkbox(s.cashCollected, { checked -> store.update { it.copy(cashCollected = checked) } })
++            Column(Modifier.weight(1f)) {
++                TxText("Full Cash Payment Collected")
++                TxCaption("Exact ${riderMoney(s.total)} received and confirmed")
++            }
++        }
++    }
++    TxButton("COMPLETE PASUGO & GO ONLINE", enabled = s.canComplete && handover.bitmap != null && receipt.bitmap != null) {
++        store.update { it.complete(System.currentTimeMillis()) }
++        if (store.state.stage == DeliveryStage.COMPLETED) onCompleted()
++    }
++    TxCaption("The demo records one completed trip and returns you online. A new dispatch requires backend integration.")
++}
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/ui/delivery/RiderDeliveryScreens.kt b/app/src/main/java/com/tagoloanxpress/rider/ui/delivery/RiderDeliveryScreens.kt
+index d16c01ae5dc75f2a59e226155e3675061de2a930..5c1ee4bb233968e9685d1548caf3023c35edadb0 100644
+--- a/app/src/main/java/com/tagoloanxpress/rider/ui/delivery/RiderDeliveryScreens.kt
++++ b/app/src/main/java/com/tagoloanxpress/rider/ui/delivery/RiderDeliveryScreens.kt
+@@ -88,23 +88,25 @@ fun RiderActiveDeliveryScreen(
+     onArrivedAtStore: () -> Unit,
+     onOpenReceipt: () -> Unit,
+     onBackClick: () -> Unit,
++    onArrivedAtCustomer: () -> Unit,
++    onOpenChat: () -> Unit,
++    onOpenFallback: () -> Unit,
+ ) {
+-    var message by rememberSaveable { mutableStateOf<String?>(null) }
+     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+         DeliveryHeader("Active Pasugo #TGX-8921", "● BUSY", onBackClick)
+-        val totalCentavos = productCostCentavos + 6000L
++        val totalCentavos = (if (deliveryStarted) productCostCentavos else 20000L) + 6000L
+         Panel(Color(0xFFECEAE2)) { Text(if (deliveryStarted) "Heading to customer" else "Route preview", fontSize = 18.sp, fontWeight = FontWeight.Bold); Caption("Map and GPS will be connected later."); LocationBlock("PICKUP", "Minute Burger, Poblacion", "Sample ETA: 4 min", Amber); LocationBlock("DROP-OFF", "Zone 3, Mohon", "Total: 2.0 km • COD: ${deliveryMoney(totalCentavos)}", Color(0xFF21C98E)) }
+         Panel {
+             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Image(painterResource(R.drawable.delivery_customer), "Neil Dairo", contentScale = ContentScale.Crop, modifier = Modifier.size(44.dp).clip(CircleShape)); Column(Modifier.weight(1f)) { Text("Neil Dairo", fontWeight = FontWeight.Bold); Caption("CUSTOMER"); Caption("Zone 3, Mohon (near Chapel)") }; Text("+₱60.00", fontWeight = FontWeight.ExtraBold, color = Color(0xFF008F64)) }
+-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton({ message = "Chat UI will be connected in a later step." }, Modifier.weight(1f)) { Text("💬 CHAT") }; Button({ message = "Calling is unavailable for this sample customer." }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Ink)) { Text("📞 CALL") } }
++            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onOpenChat, Modifier.weight(1f)) { Text("💬 CHAT") }; Button(onOpenFallback, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Ink)) { Text("📞 CALL") } }
+         }
+         Panel { Text("🍔 Minute Burger (x2 Packs)", fontWeight = FontWeight.Bold); Caption(if (deliveryStarted) "Product cost: ${deliveryMoney(productCostCentavos)} • Cash on Delivery" else "Advance: ₱200.00 • Cash on Delivery"); SummaryRow("Collect from customer", if (deliveryStarted) deliveryMoney(totalCentavos) else "₱260.00"); if (deliveryStarted) DeliveryButton("VIEW RECEIPT", R.drawable.receipt_next) { onOpenReceipt() } }
+         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("1 To Store", color = if (!arrivedAtStore && !deliveryStarted) Ink else Muted, fontWeight = FontWeight.Bold, fontSize = 12.sp); Text("2 Buying", color = if (arrivedAtStore && !deliveryStarted) Ink else Muted, fontWeight = FontWeight.Bold, fontSize = 12.sp); Text("3 Deliver", color = if (deliveryStarted) Ink else Muted, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+         Notice(if (deliveryStarted) "● STEP 3: Heading to customer" else if (arrivedAtStore) "● STEP 2: At store — purchase items and upload receipt." else "● STEP 1: Heading to Pickup Store")
+         if (!deliveryStarted) DeliveryButton(if (arrivedAtStore) "CONTINUE TO RECEIPT" else "MARK AS ARRIVED AT STORE", null, Ink) { if (arrivedAtStore) onOpenReceipt() else onArrivedAtStore() }
++        if (deliveryStarted) DeliveryButton("MARK AS ARRIVED AT CUSTOMER", null, Ink, onArrivedAtCustomer)
+         Caption("UI demo • Status changes stay on this device.")
+     }
+-    message?.let { AlertDialog(onDismissRequest = { message = null }, title = { Text("Demo information") }, text = { Text(it) }, confirmButton = { TextButton({ message = null }) { Text("Close") } }) }
+ }
+ 
+ @Composable private fun DeliveryHeader(title: String, badge: String, onBack: () -> Unit) { Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { IconButton(onBack) { LocalIcon(R.drawable.delivery_back, 24) }; Text(title, Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.Bold); Text(badge, Modifier.background(if (badge.contains("BUSY")) Color(0xFFFFEBEE) else Amber, RoundedCornerShape(20.dp)).padding(10.dp, 6.dp), color = if (badge.contains("BUSY")) Color(0xFFC62828) else Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold) } }
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/ui/history/RiderHistoryScreens.kt b/app/src/main/java/com/tagoloanxpress/rider/ui/history/RiderHistoryScreens.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..6ccb490a81b5868fb89a6e21125cbe7673ea05e4
+--- /dev/null
++++ b/app/src/main/java/com/tagoloanxpress/rider/ui/history/RiderHistoryScreens.kt
+@@ -0,0 +1,73 @@
++package com.tagoloanxpress.rider.ui.history
++
++import androidx.compose.foundation.layout.*
++import androidx.compose.foundation.horizontalScroll
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.material3.*
++import androidx.compose.runtime.*
++import androidx.compose.runtime.saveable.rememberSaveable
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.unit.dp
++import com.tagoloanxpress.rider.model.*
++import com.tagoloanxpress.rider.ui.shared.*
++import java.text.SimpleDateFormat
++import java.util.*
++
++@Composable
++fun RiderHistoryContent(trips: List<CompletedTrip>, onTrip: (String) -> Unit) {
++    var filter by rememberSaveable { mutableStateOf("All Trips") }
++    val today = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
++    val week = Calendar.getInstance().apply { set(Calendar.DAY_OF_WEEK, firstDayOfWeek); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }.timeInMillis
++    val visible = trips.filter { filter == "All Trips" || it.completedAt >= if (filter == "Today") today else week }
++    TxTitle("Delivery History")
++    TxCaption("Rider Completed Errand Logs • This device")
++    TxPanel(TxAmber) {
++        TxRow("TOTAL COMPLETED PASUGO", "${trips.size} Deliveries")
++        TxTitle(riderMoney(trips.sumOf { it.fee }))
++        TxCaption("Total delivery fees earned. Product advances are reimbursements.")
++    }
++    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++        listOf("All Trips", "Today", "This Week").forEach { option -> FilterChip(selected = filter == option, onClick = { filter = option }, label = { Text(option) }) }
++    }
++    if (visible.isEmpty()) TxPanel { TxTitle("No completed trips"); TxText("Completed deliveries matching this filter will appear here.") }
++    visible.forEach { trip ->
++        TxPanel {
++            TxTitle("🍔 Food Delivery #${trip.id}")
++            TxCaption("● Completed • ${tripDate(trip.completedAt)}")
++            TxText("Neil Dairo • Zone 3, Mohon")
++            TxPanel(Color(0xFFF6F4EC)) { TxText("Minute Burger, Poblacion"); TxCaption("↓ 2.0 km transit distance"); TxText("Zone 3, Mohon") }
++            TxRow("Product handled", riderMoney(trip.productCost))
++            TxRow("Fee earned", riderMoney(trip.fee))
++            TxButton("VIEW TRIP RECEIPT") { onTrip(trip.id) }
++        }
++    }
++}
++
++@Composable
++fun RiderTripScreen(trip: CompletedTrip, onBack: () -> Unit) {
++    RiderPage("Trip Log #${trip.id}", onBack) {
++        TxPanel {
++            TxRow("● COMPLETED TRIP", tripDate(trip.completedAt))
++            TxCaption("CUSTOMER"); TxTitle("Neil Dairo")
++            HorizontalDivider()
++            TxText("🍔 Minute Burger (x2)")
++            TxCaption("PICKUP LOCATION"); TxText("Minute Burger, Poblacion, Tagoloan")
++            TxCaption("DROP-OFF LOCATION"); TxText("Zone 3, Mohon, Tagoloan")
++            TxCaption("Sample distance: 2.0 km")
++            HorizontalDivider()
++            TxRow("Actual receipt amount", riderMoney(trip.productCost))
++            TxRow("Delivery fee earned", riderMoney(trip.fee))
++            TxPanel(Color(0xFFFFF3D5)) { TxRow("TOTAL CASH COLLECTED", riderMoney(trip.total)) }
++        }
++        TxPanel(Color(0xFFFFF8E1)) {
++            TxTitle("PROOF & DOCUMENTS")
++            TxText("Store Receipt Photo"); LocalPhoto(trip.receipt, 220)
++            TxText("Handover Photo"); LocalPhoto(trip.handover, 220)
++        }
++        TxCaption("Recorded locally • Not synced to an admin ledger.")
++        TxButton("CLOSE TRIP DETAILS", white = true, onClick = onBack)
++    }
++}
++
++private fun tripDate(time: Long): String = SimpleDateFormat("MMM d, yyyy • h:mm a", Locale.getDefault()).format(Date(time))
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/ui/login/RiderLoginScreen.kt b/app/src/main/java/com/tagoloanxpress/rider/ui/login/RiderLoginScreen.kt
+index 1d6f6a8562228446cf24420f62495f7692fa011d..b9c18a497ea4496121bd6d1d285aa0907de9b087 100644
+--- a/app/src/main/java/com/tagoloanxpress/rider/ui/login/RiderLoginScreen.kt
++++ b/app/src/main/java/com/tagoloanxpress/rider/ui/login/RiderLoginScreen.kt
+@@ -57,6 +57,7 @@ fun RiderLoginScreen(
+                     Spacer(Modifier.height(14.dp)); Text("Rider Sign In", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = RiderInk)
+                     Spacer(Modifier.height(6.dp)); Text("Sign in to view and fulfill nearby Pasugo requests.", fontSize = 13.sp, color = Color(0xFF555555), textAlign = TextAlign.Center)
+                 }
++                Text("LOCAL UI DEMO • Use any nonempty login. No real authentication.", fontSize = 11.sp, color = RiderInk)
+                 Spacer(Modifier.height(24.dp)); FieldLabel("Registered Mobile / Username")
+                 Spacer(Modifier.height(6.dp))
+                 RiderTextField(identifier, { identifier = it }, "Registered mobile or username", R.drawable.rider_phone, submitted && identifier.isBlank())
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/ui/messages/RiderCommunicationScreens.kt b/app/src/main/java/com/tagoloanxpress/rider/ui/messages/RiderCommunicationScreens.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..692352b28a6f65d3439374f0cd46a583fac874b8
+--- /dev/null
++++ b/app/src/main/java/com/tagoloanxpress/rider/ui/messages/RiderCommunicationScreens.kt
+@@ -0,0 +1,129 @@
++package com.tagoloanxpress.rider.ui.messages
++
++import android.content.ActivityNotFoundException
++import android.content.Intent
++import android.net.Uri
++import androidx.activity.compose.BackHandler
++import androidx.compose.foundation.*
++import androidx.compose.foundation.layout.*
++import androidx.compose.material3.*
++import androidx.compose.runtime.*
++import androidx.compose.runtime.saveable.rememberSaveable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import com.tagoloanxpress.R
++import com.tagoloanxpress.rider.model.*
++import com.tagoloanxpress.rider.ui.shared.*
++
++@Composable
++fun RiderChatScreen(store: RiderStore, onBack: () -> Unit, onFallback: () -> Unit) {
++    var draft by rememberSaveable { mutableStateOf("") }
++    val s = store.state
++    val scroll = rememberScrollState()
++    LaunchedEffect(s.messages.size) { scroll.animateScrollTo(scroll.maxValue) }
++    fun send(text: String) {
++        if (text.isNotBlank() && store.state.busy) {
++            store.update { it.copy(messages = (it.messages + text.trim().take(1000)).takeLast(100)) }
++            draft = ""
++        }
++    }
++    BackHandler(onBack = onBack)
++    Column(Modifier.fillMaxSize().background(TxCream).safeDrawingPadding().imePadding()) {
++        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
++            IconButton(onClick = onBack) { TxAsset(R.drawable.fg_3_5368_imgsvg1, "Back") }
++            Column(Modifier.weight(1f)) { TxTitle("Neil Dairo"); TxCaption("CUSTOMER • Zone 3, Mohon") }
++            TextButton(onClick = onFallback) { Text("CALL") }
++        }
++        TxText("#TGX-8921 • Minute Burger → Zone 3 Mohon")
++        Column(Modifier.weight(1f).verticalScroll(scroll).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
++            TxCaption("UI DEMO • Messages are stored only on this device. No delivery or encryption service is connected.")
++            TxPanel { TxText("Neil Dairo (sample customer)"); TxText("Please make sure no onions on the double cheeseburger. Thank you!") }
++            s.messages.forEach { message ->
++                TxPanel(TxAmber) { TxCaption("You (Rider) • Saved locally"); TxText(message) }
++            }
++            TxPanel { TxText("🍔 MINUTE BURGER (2 ITEMS)"); TxCaption("Special: No onions, extra dressing") }
++        }
++        TxCaption("⚡ QUICK RIDER UPDATES • Tap to add to demo conversation")
++        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++            listOf("I'm at the store", "Traffic delay", "Heading to drop-off", "Arrived outside").forEach { update ->
++                OutlinedButton(enabled = s.busy, onClick = { send(update) }) { Text(update, fontSize = 11.sp) }
++            }
++        }
++        TextButton(onClick = onFallback, modifier = Modifier.fillMaxWidth()) { Text("SMS / CALL FALLBACK →") }
++        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++            OutlinedTextField(draft, { draft = it.take(1000) }, Modifier.weight(1f), label = { Text("Type a message…") }, maxLines = 3)
++            IconButton(enabled = draft.isNotBlank() && s.busy, onClick = { send(draft) }) { TxAsset(R.drawable.fg_3_5368_imgsvg5, "Add message", 22f) }
++        }
++    }
++}
++
++@Composable
++fun RiderFallbackScreen(onBack: () -> Unit) {
++    val context = LocalContext.current
++    var phone by rememberSaveable { mutableStateOf("") }
++    var message by rememberSaveable { mutableStateOf("TAGOLOAN XPRESS: Rider update for Pasugo #TGX-8921. Please contact me about your delivery.") }
++    var error by remember { mutableStateOf("") }
++    val normalized = phone.replace(" ", "").replace("-", "")
++    val valid = Regex("""\+?\d{10,15}""").matches(normalized)
++    fun launch(intent: Intent) {
++        try { context.startActivity(intent); error = "" }
++        catch (_: ActivityNotFoundException) { error = "No compatible phone or SMS app is installed." }
++        catch (_: SecurityException) { error = "Android could not open this action." }
++    }
++    RiderPage("Offline Fallback Options", onBack) {
++        TxAsset(R.drawable.fg_3_5644_imgcontainer, width = 48f)
++        TxTitle("SMS & CELLULAR FALLBACK")
++        TxText("Use these options when app data is unavailable. This preview does not monitor your connection or send messages automatically.")
++        TxPanel {
++            TxTitle("ACTIVE ERRAND: #TGX-8921")
++            TxText("Send Direct SMS Message")
++            TxCaption("Opens the native SMS composer. You review and send the message yourself.")
++            TxText("Direct Cellular Phone Call")
++            TxCaption("Opens the dialer. No call is placed automatically.")
++        }
++        OutlinedTextField(phone, { phone = it.take(22) }, Modifier.fillMaxWidth(), label = { Text("Recipient phone number") }, singleLine = true)
++        TxCaption("Enter a number you intend to contact. The sample customer has no live phone number.")
++        OutlinedTextField(message, { message = it.take(1000) }, Modifier.fillMaxWidth(), label = { Text("SMS draft") }, minLines = 3)
++        TxButton("LAUNCH NATIVE SMS MESSENGER", enabled = valid && message.isNotBlank()) {
++            launch(Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", normalized, null)).putExtra("sms_body", message))
++        }
++        TxButton("OPEN CELLULAR DIALER", enabled = valid, white = true) { launch(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", normalized, null))) }
++        TxButton("RETURN TO APP CHAT", white = true, onClick = onBack)
++        if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
++        TxCaption("Carrier rates may apply. No SMS gateway or connectivity failover is implemented.")
++    }
++}
++
++@Composable
++fun RiderNotificationsScreen(store: RiderStore, onBack: () -> Unit, onRequest: () -> Unit, onActive: () -> Unit) {
++    val s = store.state
++    RiderPage("Rider Notifications", onBack) {
++        TxCaption("In-app preview • No FCM push or lock-screen service connected")
++        TxButton(if (s.notificationsRead) "ALL NOTIFICATIONS READ" else "MARK ALL AS READ", enabled = !s.notificationsRead, white = true) {
++            store.update { it.copy(notificationsRead = true) }
++        }
++        TxPanel {
++            TxAsset(R.drawable.fg_3_6067_imgcontainer7)
++            TxCaption(if (s.available) "Action Required • Sample dispatch" else "Sample dispatch • No longer available")
++            TxTitle("New Pasugo Errand Request")
++            TxText("A customer nearby in Poblacion, Tagoloan submitted an express errand. Review the request before accepting.")
++            TxButton("VIEW REQUEST", enabled = s.available, onClick = onRequest)
++        }
++        TxPanel {
++            TxTitle(if (s.stage == DeliveryStage.COMPLETED) "Delivery Completed" else "Proof of Handover Required")
++            TxText(if (s.stage == DeliveryStage.COMPLETED) "The completed demo delivery is available in History." else "At the customer's location, select a handover photo and confirm the receipt and full cash collection.")
++            TxButton("VIEW DELIVERY", enabled = s.busy || s.stage == DeliveryStage.COMPLETED, onClick = onActive)
++        }
++        TxPanel {
++            TxAsset(R.drawable.fg_3_6067_imgcontainer12)
++            TxTitle("Admin Notice: Operations Dispatch Update")
++            TxText("Sample advisory: road repairs near Tagoloan Public Plaza. Check local conditions before choosing a route.")
++            TxCaption("Illustrative design content, not a verified traffic alert.")
++        }
++    }
++}
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/ui/onboarding/RiderOnboardingScreens.kt b/app/src/main/java/com/tagoloanxpress/rider/ui/onboarding/RiderOnboardingScreens.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..97f9f577ca2261da23db0a0b1e967a7205922851
+--- /dev/null
++++ b/app/src/main/java/com/tagoloanxpress/rider/ui/onboarding/RiderOnboardingScreens.kt
+@@ -0,0 +1,133 @@
++package com.tagoloanxpress.rider.ui.onboarding
++
++import androidx.compose.foundation.layout.*
++import androidx.compose.foundation.text.KeyboardOptions
++import androidx.compose.material3.*
++import androidx.compose.runtime.*
++import androidx.compose.runtime.saveable.rememberSaveable
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.text.input.*
++import androidx.compose.ui.unit.dp
++import com.tagoloanxpress.R
++import com.tagoloanxpress.rider.model.*
++import com.tagoloanxpress.rider.ui.shared.*
++
++@Composable
++fun RiderApplicationScreen(store: RiderStore, onSubmitted: () -> Unit, onBack: () -> Unit) {
++    var name by rememberSaveable { mutableStateOf("") }
++    var mobile by rememberSaveable { mutableStateOf("") }
++    var username by rememberSaveable { mutableStateOf("") }
++    var password by remember { mutableStateOf("") }
++    var visible by rememberSaveable { mutableStateOf(false) }
++    var doc0 by rememberSaveable { mutableStateOf("") }
++    var doc1 by rememberSaveable { mutableStateOf("") }
++    var doc2 by rememberSaveable { mutableStateOf("") }
++    var error by remember { mutableStateOf("") }
++    val documents = listOf(doc0, doc1, doc2)
++    RiderPage("Rider Application", onBack) {
++        TxCaption("TAGOLOAN XPRESS Partner • STEP 1 OF 1")
++        TxPanel {
++            TxTitle("Create Rider Account")
++            TxText("Fill in your personal credentials")
++            OutlinedTextField(name, { name = it.take(80) }, Modifier.fillMaxWidth(), label = { Text("Full Name") }, singleLine = true)
++            OutlinedTextField(mobile, { mobile = it.take(20) }, Modifier.fillMaxWidth(), label = { Text("Mobile Number • PH (+63)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
++            OutlinedTextField(username, { username = it.take(100) }, Modifier.fillMaxWidth(), label = { Text("Email / Username") }, singleLine = true)
++            OutlinedTextField(password, { password = it.take(128) }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true, visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), trailingIcon = {
++                IconButton(onClick = { visible = !visible }) { Icon(androidx.compose.ui.res.painterResource(R.drawable.rider_eye), if (visible) "Hide password" else "Show password") }
++            })
++        }
++        TxRow("REQUIRED DOCUMENTS", "${documents.count { it.isBlank() }} Pending")
++        listOf("OR / CR Document", "Driver's License", "Other Requirements / Clearance").forEachIndexed { index, title ->
++            TxPanel { PhotoSelector(title, documents[index], { uri -> when (index) { 0 -> doc0 = uri; 1 -> doc1 = uri; else -> doc2 = uri } }, camera = false) }
++        }
++        TxPanel(TxCream) { TxText("Registration does not automatically activate your rider account. Admin approval is required. This UI demo stores document photos locally and does not create a real account or save your password.") }
++        if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
++        TxButton("SUBMIT APPLICATION") {
++            val phone = mobile.replace(" ", "").replace("-", "")
++            error = when {
++                name.trim().length < 2 -> "Enter your full name."
++                !Regex("""(09\d{9}|\+639\d{9})""").matches(phone) -> "Enter a valid Philippine mobile number."
++                username.trim().length < 3 -> "Enter an email or username with at least 3 characters."
++                password.length < 8 -> "Use at least 8 characters for the demo password."
++                documents.any { it.isBlank() } -> "Select all three document photos."
++                store.state.busy -> "Finish the active delivery before starting a new application."
++                else -> ""
++            }
++            if (error.isEmpty()) {
++                store.update { RiderState(name = name.trim(), mobile = phone, username = username.trim(), documents = documents, approval = Approval.PENDING, profileReady = false, accepting = false) }
++                password = ""
++                onSubmitted()
++            }
++        }
++        TxButton("ALREADY A RIDER? SIGN IN", white = true, onClick = onBack)
++    }
++}
++
++@Composable
++fun RiderVerificationScreen(store: RiderStore, onApproved: () -> Unit, onLogout: () -> Unit) {
++    var checked by rememberSaveable { mutableStateOf(false) }
++    RiderPage("Application Status", onLogout) {
++        TxPanel(TxCream) {
++            TxAsset(R.drawable.fg_3_1701_imgsvg1)
++            TxTitle("PENDING VERIFICATION")
++            TxTitle("Application Under Review")
++            TxText("You cannot view or accept Pasugo requests until full Admin approval is complete.")
++            TxCaption("Design estimate: 24–48 hours. This demo has no live review service.")
++        }
++        TxPanel {
++            TxTitle("APPROVAL PROGRESS")
++            TxRow("✓ Account Registration", "Completed locally")
++            TxRow("✓ Documents Submitted", "3 selected")
++            TxPanel(TxAmber) { TxText("Admin Verification • PENDING"); TxCaption("OR/CR & Driver's License validation") }
++            TxCaption("○ Interview & Orientation")
++            TxCaption("○ Final Briefing & Admin Approval")
++            TxRow("Applicant", store.state.name)
++            TxCaption("Demo ID: TX-RDR-8924")
++        }
++        TxButton("CHECK STATUS AGAIN") { checked = true }
++        if (checked) TxCaption("Still pending. A backend is needed to retrieve real approval updates.")
++        TxButton("PREVIEW ADMIN APPROVAL (DEMO)", white = true) {
++            store.update { it.copy(approval = Approval.APPROVED) }; onApproved()
++        }
++        TxCaption("The preview button only advances this local prototype; it is not admin verification.")
++        TxButton("LOG OUT", white = true, onClick = onLogout)
++    }
++}
++
++@Composable
++fun RiderApprovedScreen(store: RiderStore, onLogin: () -> Unit) {
++    RiderPage("Application Approved", onLogin) {
++        TxAsset(R.drawable.fg_3_1809_imgsvg1, width = 48f)
++        TxTitle("You Are Approved!")
++        TxText("Approval preview for ${store.state.name}. No server approval was performed.")
++        TxPanel(androidx.compose.ui.graphics.Color(0xFFE8F5E9)) {
++            TxTitle("ACTIVE & ELIGIBLE")
++            TxText("✓ Eligible to accept nearby Pasugo requests in Tagoloan")
++            TxText("✓ Customer routing and earnings screens")
++            TxText("✓ TAGOLOAN XPRESS Partner Rider profile")
++        }
++        TxPanel { TxRow("RIDER ACCOUNT", store.state.name); TxRow("RIDER ID", "TX-RDR-8924") }
++        TxButton("PROCEED TO RIDER LOGIN", onClick = onLogin)
++    }
++}
++
++@Composable
++fun RiderProfileSetupScreen(store: RiderStore, onSaved: () -> Unit, onBack: () -> Unit) {
++    var photo by rememberSaveable { mutableStateOf(store.state.photo) }
++    val validPhoto = rememberImagePreview(photo).bitmap != null
++    RiderPage("Setup Profile", onBack) {
++        TxTitle("Add Profile Picture")
++        TxText("Customers will use this photo to identify you upon pickup and delivery.")
++        TxPanel { PhotoSelector("Rider photo", photo, { photo = it }) }
++        TxPanel {
++            TxTitle("PHOTO REQUIREMENTS")
++            TxText("✓ Clear face view, without masks, tinted sunglasses, or heavy filters")
++            TxText("✓ Well-lit environment with a neutral or plain background")
++            TxText("✓ Professional appearance, wearing a shirt or delivery attire")
++        }
++        TxCaption("Your photo will be displayed on the customer's tracking card once connected to the backend.")
++        TxButton("SAVE & CONTINUE TO DASHBOARD", enabled = validPhoto && store.state.approval == Approval.APPROVED) {
++            store.update { it.copy(photo = photo, profileReady = true, accepting = true) }; onSaved()
++        }
++    }
++}
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/ui/profile/RiderProfileScreens.kt b/app/src/main/java/com/tagoloanxpress/rider/ui/profile/RiderProfileScreens.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a371fb3252a424633a7391088eaa5ae63ca94475
+--- /dev/null
++++ b/app/src/main/java/com/tagoloanxpress/rider/ui/profile/RiderProfileScreens.kt
+@@ -0,0 +1,63 @@
++package com.tagoloanxpress.rider.ui.profile
++
++import androidx.compose.foundation.Image
++import androidx.compose.foundation.layout.*
++import androidx.compose.material3.*
++import androidx.compose.runtime.*
++import androidx.compose.runtime.saveable.rememberSaveable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.res.painterResource
++import androidx.compose.ui.unit.dp
++import com.tagoloanxpress.R
++import com.tagoloanxpress.rider.model.*
++import com.tagoloanxpress.rider.ui.shared.*
++
++@Composable
++fun RiderProfileContent(store: RiderStore, onHistory: () -> Unit, onEdit: () -> Unit, onPhoto: () -> Unit, onSecurity: () -> Unit, onLogout: () -> Unit) {
++    val s = store.state
++    TxTitle("Rider Profile")
++    TxCaption("Tagoloan Pasugo Fleet • Local UI demo")
++    TxPanel {
++        if (s.photo.isNotBlank()) LocalPhoto(s.photo, 105)
++        else Image(painterResource(R.drawable.fg_3_4288_imgjuandelacruzrider), "Sample rider portrait", Modifier.size(105.dp).align(Alignment.CenterHorizontally))
++        TxTitle(s.name)
++        TxText("🛵 Plate: ${s.plate} • ${s.mobile}")
++        TxText("● ${if (s.approval == Approval.APPROVED) "APPROVED RIDER (DEMO)" else "PENDING VERIFICATION"}")
++        HorizontalDivider()
++        TxRow("RATING", "5.0 ★ (sample)")
++        TxRow("DELIVERIES", s.trips.size.toString())
++        TxRow("FLEET HUB", "Tagoloan")
++    }
++    TxPanel {
++        TxText("📄 License & OR/CR")
++        TxCaption(if (s.documents.all { it.isNotBlank() }) "Documents selected on this device" else "Sample accreditation • No real verification performed")
++        TxRow("System Status", if (s.busy) "BUSY" else if (s.accepting) "Available for Pasugo" else "Off duty")
++    }
++    TxPanel {
++        TxButton("UPDATE VEHICLE & DOCUMENTS", white = true, onClick = onEdit)
++        TxButton("UPDATE PROFILE PICTURE", white = true, onClick = onPhoto)
++        TxButton("COMPLETED PASUGO HISTORY", white = true, onClick = onHistory)
++        TxButton("ACCOUNT SECURITY", white = true, onClick = onSecurity)
++    }
++    TxButton("LOG OUT OF RIDER ACCOUNT", white = true, onClick = onLogout)
++}
++
++@Composable
++fun RiderVehicleScreen(store: RiderStore, onBack: () -> Unit) {
++    var vehicle by rememberSaveable { mutableStateOf(store.state.vehicle) }
++    var plate by rememberSaveable { mutableStateOf(store.state.plate) }
++    RiderPage("Vehicle & Documents", onBack) {
++        TxPanel {
++            OutlinedTextField(vehicle, { vehicle = it.take(80) }, Modifier.fillMaxWidth(), label = { Text("Motorcycle model") }, singleLine = true)
++            OutlinedTextField(plate, { plate = it.take(20) }, Modifier.fillMaxWidth(), label = { Text("Plate number") }, singleLine = true)
++        }
++        listOf("OR / CR Document", "Driver's License", "Other Requirements / Clearance").forEachIndexed { index, label ->
++            TxPanel { PhotoSelector(label, store.state.documents[index], { uri -> store.update { s -> s.copy(documents = s.documents.toMutableList().apply { set(index, uri) }) } }, camera = false) }
++        }
++        TxCaption("Local document photos only. Renewals must be reverified when the admin backend is connected.")
++        TxButton("SAVE VEHICLE DETAILS", enabled = vehicle.isNotBlank() && plate.isNotBlank()) {
++            store.update { it.copy(vehicle = vehicle.trim(), plate = plate.trim()) }; onBack()
++        }
++    }
++}
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/ui/receipt/RiderStoreReceiptScreen.kt b/app/src/main/java/com/tagoloanxpress/rider/ui/receipt/RiderStoreReceiptScreen.kt
+index 6a5ce533114eea6eb8843a17dd07e0d4887f93d2..feee5be6c7a2f9c4b04ec7f28675acbbde9c0fd0 100644
+--- a/app/src/main/java/com/tagoloanxpress/rider/ui/receipt/RiderStoreReceiptScreen.kt
++++ b/app/src/main/java/com/tagoloanxpress/rider/ui/receipt/RiderStoreReceiptScreen.kt
+@@ -1,44 +1,13 @@
+ package com.tagoloanxpress.rider.ui.receipt
+ 
+-import android.content.Context
+-import android.content.Intent
+-import android.graphics.Bitmap
+-import android.graphics.BitmapFactory
+-import android.net.Uri
+-import androidx.activity.compose.BackHandler
+-import androidx.activity.compose.rememberLauncherForActivityResult
+-import androidx.activity.result.contract.ActivityResultContracts
+-import androidx.annotation.DrawableRes
+-import androidx.compose.foundation.Image
+-import androidx.compose.foundation.background
+-import androidx.compose.foundation.border
+ import androidx.compose.foundation.layout.*
+-import androidx.compose.foundation.rememberScrollState
+-import androidx.compose.foundation.shape.RoundedCornerShape
+ import androidx.compose.foundation.text.KeyboardOptions
+-import androidx.compose.foundation.verticalScroll
+ import androidx.compose.material3.*
+ import androidx.compose.runtime.*
+-import androidx.compose.ui.Alignment
+ import androidx.compose.ui.Modifier
+-import androidx.compose.ui.graphics.Color
+-import androidx.compose.ui.graphics.asImageBitmap
+-import androidx.compose.ui.layout.ContentScale
+-import androidx.compose.ui.platform.LocalContext
+-import androidx.compose.ui.res.painterResource
+-import androidx.compose.ui.text.font.FontWeight
+ import androidx.compose.ui.text.input.KeyboardType
+-import androidx.compose.ui.unit.dp
+-import androidx.compose.ui.unit.sp
+-import com.tagoloanxpress.R
+-import kotlinx.coroutines.Dispatchers
+-import kotlinx.coroutines.withContext
+-import java.math.BigDecimal
+-import java.util.Locale
+-
+-private val Ink = Color(0xFF18181F)
+-private val Amber = Color(0xFFFEBC20)
+-private val Cream = Color(0xFFFFFDF5)
++import com.tagoloanxpress.rider.model.*
++import com.tagoloanxpress.rider.ui.shared.*
+ 
+ @Composable
+ fun RiderStoreReceiptScreen(
+@@ -49,77 +18,46 @@ fun RiderStoreReceiptScreen(
+     onBackClick: () -> Unit,
+     onStartDelivery: (Long) -> Unit,
+ ) {
+-    val context = LocalContext.current
+-    var pickerError by remember { mutableStateOf<String?>(null) }
+-    val amount = parseCentavos(actualCostInput)
+-    val invalidAmount = actualCostInput.isNotEmpty() && amount == null
+-    val total = amount?.plus(6000L)
+-    val preview by produceState<Bitmap?>(null, receiptUri) {
+-        value = receiptUri?.let { withContext(Dispatchers.IO) { readPreview(context, Uri.parse(it)) } }
+-    }
+-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+-        if (uri != null) {
+-            try {
+-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+-                pickerError = null
+-                onReceiptUriChange(uri.toString())
+-            } catch (_: SecurityException) {
+-                pickerError = "Couldn't retain access to this image. Choose another file."
+-            }
+-        }
+-    }
+-    BackHandler(onBack = onBackClick)
+-    Column(Modifier.fillMaxSize().background(Cream).safeDrawingPadding().imePadding()) {
+-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+-            IconButton(onBackClick) { ReceiptIcon(R.drawable.receipt_back) }
+-            Column(Modifier.weight(1f)) { Text("Store Purchase #TGX-8921", fontWeight = FontWeight.ExtraBold); Text("Order verification & billing", fontSize = 11.sp, color = Color.Gray) }
++    val amount = parseRiderCentavos(actualCostInput)
++    val uri = receiptUri.orEmpty()
++    val preview = rememberImagePreview(uri)
++    RiderPage("Store Purchase #TGX-8921", onBackClick) {
++        TxCaption("Order verification & billing • STEP 2: At Store (Buying)")
++        TxPanel {
++            TxTitle("🍔 Minute Burger (x2 Packs)")
++            TxCaption("Customer: Neil Dairo • Mohon Zone 3")
++            TxRow("EST. BUDGET", riderMoney(20000))
+         }
+-        HorizontalDivider(thickness = 2.dp, color = Ink)
+-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+-            Text("✓ To Store   —   ② STEP 2: Buying   —   ③ Delivery", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+-            Panel { Text("🍔 Minute Burger (x2 Packs)", fontWeight = FontWeight.Bold); Text("Customer: Neil Dairo • Mohon Zone 3", fontSize = 12.sp); MoneyRow("EST. BUDGET", money(20000L)) }
+-            Panel {
+-                Text("🏷 ENTER ACTUAL RECEIPT AMOUNT", fontWeight = FontWeight.ExtraBold)
+-                Text("ACTUAL PRODUCT COST (₱) • REQUIRED", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+-                OutlinedTextField(actualCostInput, onActualCostChange, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Actual product cost") }, placeholder = { Text("195.00") }, prefix = { Text("₱ ") }, suffix = { Text("PHP") }, isError = invalidAmount, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), shape = RoundedCornerShape(12.dp))
+-                if (invalidAmount) Text("Enter an amount above ₱0 and up to ₱999,999.99, with no more than two decimal places.", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+-                Text("Estimated budget was ₱200.00. Enter exact receipt total.", fontSize = 11.sp, color = Color.Gray)
+-                HorizontalDivider()
+-                amount?.let { MoneyRow(if (it <= 20000L) "Customer savings on advance:" else "Above estimated budget:", if (it <= 20000L) "-${money(20000L - it)}" else "+${money(it - 20000L)}") }
++        TxPanel {
++            TxTitle("ENTER ACTUAL RECEIPT AMOUNT")
++            OutlinedTextField(
++                actualCostInput, onActualCostChange, Modifier.fillMaxWidth(),
++                singleLine = true, label = { Text("Actual Product Cost (₱)") },
++                placeholder = { Text("195.00") }, prefix = { Text("₱ ") }, suffix = { Text("PHP") },
++                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
++                isError = actualCostInput.isNotEmpty() && amount == null,
++            )
++            if (actualCostInput.isNotEmpty() && amount == null) Text("Enter ₱0.01–₱999,999.99 with at most two decimal places.", color = MaterialTheme.colorScheme.error)
++            TxCaption("Estimated budget was ₱200.00. Enter the exact receipt total.")
++            amount?.let { cost ->
++                TxRow(if (cost <= 20000) "Customer savings on advance" else "Above estimated budget", riderMoney(kotlin.math.abs(20000 - cost)))
++                if (cost > 20000) TxCaption("Confirm any extra cost with the customer before proceeding.")
+             }
+-            Panel(Amber) {
+-                Text("📸 RECEIPT PHOTO • REQUIRED", fontWeight = FontWeight.ExtraBold)
+-                if (preview != null) Image(preview!!.asImageBitmap(), "Selected store receipt", Modifier.fillMaxWidth().height(180.dp), contentScale = ContentScale.Fit)
+-                else Text(if (receiptUri == null) "Choose a clear photo of the official store receipt." else "Loading receipt… If no preview appears, choose another image.", fontSize = 12.sp)
+-                OutlinedButton({ picker.launch(arrayOf("image/*")) }, Modifier.fillMaxWidth()) { ReceiptIcon(if (receiptUri == null) R.drawable.receipt_attached else R.drawable.receipt_replace, 14); Spacer(Modifier.width(8.dp)); Text(if (receiptUri == null) "SELECT RECEIPT PHOTO" else "REPLACE PHOTO") }
+-                pickerError?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
+-            }
+-            Panel(Amber) { Text("PAYMENT BREAKDOWN (COD)", fontWeight = FontWeight.ExtraBold); MoneyRow("Actual Product Cost", amount?.let(::money) ?: "—"); MoneyRow("Fixed Delivery Fee", money(6000L)); HorizontalDivider(color = Ink); Text("TOTAL TO COLLECT FROM CUSTOMER", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold); Text(total?.let(::money) ?: "—", fontSize = 30.sp, fontWeight = FontWeight.Black); Text("DIRECT CASH PAYMENT UPON DROP-OFF", fontSize = 10.sp) }
+-            Text("💡 Keep the physical store receipt ready. The customer will inspect it upon delivery at Zone 3, Mohon.", fontSize = 12.sp)
+-            Text("UI demo • The photo is selected locally and is not uploaded.", fontSize = 11.sp, color = Color.Gray)
+         }
+-        HorizontalDivider(thickness = 2.dp, color = Ink)
+-        Button(enabled = amount != null && preview != null, onClick = { amount?.let { if (preview != null) onStartDelivery(it) } }, modifier = Modifier.fillMaxWidth().padding(16.dp).heightIn(min = 54.dp), colors = ButtonDefaults.buttonColors(containerColor = Ink, contentColor = Amber), shape = RoundedCornerShape(16.dp)) { Text("START DELIVERY TO CUSTOMER", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold); Spacer(Modifier.width(8.dp)); ReceiptIcon(R.drawable.receipt_next, 20) }
+-    }
+-}
+-
+-@Composable private fun Panel(color: Color = Color.White, content: @Composable ColumnScope.() -> Unit) { Column(Modifier.fillMaxWidth().background(color, RoundedCornerShape(16.dp)).border(2.dp, Ink, RoundedCornerShape(16.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content) }
+-@Composable private fun MoneyRow(label: String, value: String) { Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { Text(label, Modifier.weight(1f), fontSize = 12.sp, color = Ink); Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Ink) } }
+-@Composable private fun ReceiptIcon(@DrawableRes id: Int, size: Int = 20) { Image(painterResource(id), null, Modifier.size(size.dp)) }
+-private fun parseCentavos(input: String): Long? { val n = input.trim(); if (!Regex("""\d{1,6}(\.\d{1,2})?""").matches(n)) return null; return try { BigDecimal(n).movePointRight(2).longValueExact().takeIf { it in 1L..99999999L } } catch (_: ArithmeticException) { null } catch (_: NumberFormatException) { null } }
+-private fun money(c: Long): String = "₱" + String.format(Locale.US, "%,d.%02d", c / 100, c % 100)
+-private fun readPreview(context: Context, uri: Uri): Bitmap? {
+-    return try {
+-        val resolver = context.contentResolver
+-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+-        var sample = 1
+-        while (bounds.outWidth / sample > 1200 || bounds.outHeight / sample > 1200) sample *= 2
+-        resolver.openInputStream(uri)?.use {
+-            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
++        TxPanel(TxCream) { PhotoSelector("UPLOAD RECEIPT PHOTO", uri, { onReceiptUriChange(it) }) }
++        TxPanel(TxAmber) {
++            TxTitle("PAYMENT BREAKDOWN (COD)")
++            TxRow("Actual Product Cost", amount?.let(::riderMoney) ?: "—")
++            TxRow("Fixed Delivery Fee", riderMoney(RiderState.FEE))
++            HorizontalDivider()
++            TxTitle("TOTAL TO COLLECT FROM CUSTOMER")
++            TxTitle(amount?.let { riderMoney(it + RiderState.FEE) } ?: "—")
++            TxCaption("DIRECT CASH PAYMENT UPON DROP-OFF")
++        }
++        TxText("Keep the physical store receipt ready. The customer will inspect it upon delivery at Zone 3, Mohon.")
++        TxButton("START DELIVERY TO CUSTOMER", enabled = amount != null && preview.bitmap != null && !preview.loading) {
++            amount?.let { if (preview.bitmap != null) onStartDelivery(it) }
+         }
+-    } catch (_: Exception) {
+-        null
++        TxCaption("UI demo • Selected photos are copied to this app's private storage, not uploaded.")
+     }
+ }
+diff --git a/app/src/main/java/com/tagoloanxpress/rider/ui/shared/RiderUi.kt b/app/src/main/java/com/tagoloanxpress/rider/ui/shared/RiderUi.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..a3a997bfae9290a5d665ba50b9081e6c7f7e0c82
+--- /dev/null
++++ b/app/src/main/java/com/tagoloanxpress/rider/ui/shared/RiderUi.kt
+@@ -0,0 +1,167 @@
++package com.tagoloanxpress.rider.ui.shared
++
++import android.content.Context
++import android.graphics.Bitmap
++import android.graphics.BitmapFactory
++import android.net.Uri
++import androidx.activity.compose.BackHandler
++import androidx.activity.compose.rememberLauncherForActivityResult
++import androidx.activity.result.contract.ActivityResultContracts
++import androidx.annotation.DrawableRes
++import androidx.compose.foundation.*
++import androidx.compose.foundation.layout.*
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.*
++import androidx.compose.runtime.*
++import androidx.compose.runtime.saveable.rememberSaveable
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.asImageBitmap
++import androidx.compose.ui.layout.ContentScale
++import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.res.painterResource
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.unit.dp
++import androidx.compose.ui.unit.sp
++import androidx.core.content.FileProvider
++import com.tagoloanxpress.R
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.withContext
++import java.io.File
++import java.io.IOException
++import java.util.UUID
++
++val TxInk = Color(0xFF18181F)
++val TxAmber = Color(0xFFFEBC20)
++val TxCream = Color(0xFFFFFDF5)
++val TxGreen = Color(0xFF2E7D32)
++
++/** Standalone screen: bounded viewport with exactly one vertical scroller. */
++@Composable
++fun RiderPage(title: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
++    BackHandler(onBack = onBack)
++    Column(Modifier.fillMaxSize().background(TxCream).safeDrawingPadding().imePadding()) {
++        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
++            IconButton(onClick = onBack) { TxAsset(R.drawable.rider_back, "Back") }
++            Text(title, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = TxInk, modifier = Modifier.weight(1f))
++        }
++        HorizontalDivider(color = TxInk, thickness = 2.dp)
++        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
++    }
++}
++
++@Composable fun TxPanel(color: Color = Color.White, content: @Composable ColumnScope.() -> Unit) {
++    Column(Modifier.fillMaxWidth().background(color, RoundedCornerShape(16.dp)).border(2.dp, TxInk, RoundedCornerShape(16.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
++}
++
++@Composable fun TxTitle(text: String) { Text(text, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = TxInk) }
++@Composable fun TxText(text: String) { Text(text, fontSize = 13.sp, lineHeight = 19.sp, color = TxInk) }
++@Composable fun TxCaption(text: String) { Text(text, fontSize = 11.sp, color = Color(0xFF555555)) }
++@Composable fun TxButton(text: String, enabled: Boolean = true, white: Boolean = false, onClick: () -> Unit) {
++    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).border(2.dp, if (enabled) TxInk else Color.Gray, RoundedCornerShape(14.dp)), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = if (white) Color.White else TxAmber, contentColor = TxInk)) {
++        Text(text, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
++    }
++}
++@Composable fun TxRow(label: String, value: String) {
++    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
++        Text(label, Modifier.weight(1f), fontSize = 12.sp, color = TxInk)
++        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TxInk)
++    }
++}
++@Composable fun TxAsset(@DrawableRes id: Int, description: String? = null, width: Float = 20f, height: Float = width) {
++    Image(painterResource(id), description, Modifier.size(width.dp, height.dp))
++}
++
++data class ImagePreview(val loading: Boolean = false, val bitmap: Bitmap? = null, val source: String = "")
++
++@Composable fun rememberImagePreview(uri: String): ImagePreview {
++    val context = LocalContext.current
++    return produceState(ImagePreview(loading = uri.isNotEmpty(), source = uri), uri) {
++        value = ImagePreview(loading = uri.isNotEmpty(), source = uri)
++        value = ImagePreview(source = uri, bitmap = if (uri.isEmpty()) null else withContext(Dispatchers.IO) { decodeImage(context, uri) })
++    }.value.let { if (it.source == uri) it else ImagePreview(loading = uri.isNotEmpty(), source = uri) }
++}
++
++@Composable fun LocalPhoto(uri: String, height: Int = 180) {
++    val preview = rememberImagePreview(uri)
++    val bitmap = preview.bitmap
++    if (bitmap != null) Image(bitmap.asImageBitmap(), "Selected photo", Modifier.fillMaxWidth().height(height.dp), contentScale = ContentScale.Fit)
++    else TxCaption(if (preview.loading) "Loading photo…" else if (uri.isBlank()) "No photo selected" else "Photo unavailable. Select it again.")
++}
++
++/** User-driven picker/camera only. Cancellation never relaunches the picker. */
++@Composable
++fun PhotoSelector(label: String, uri: String, onSelected: (String) -> Unit, camera: Boolean = true) {
++    val context = LocalContext.current
++    val scope = rememberCoroutineScope()
++    var pendingCameraUri by rememberSaveable { mutableStateOf("") }
++    var error by remember { mutableStateOf<String?>(null) }
++    var importing by remember { mutableStateOf(false) }
++    val onImage: (Uri) -> Unit = { source ->
++        importing = true
++        scope.launch {
++            val copied = withContext(Dispatchers.IO) { importImage(context, source) }
++            importing = false
++            if (copied != null) { error = null; onSelected(copied) }
++            else error = "Choose a readable image smaller than 15 MB."
++        }
++    }
++    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { selected -> if (selected != null) onImage(selected) }
++    val capture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
++        val captured = pendingCameraUri
++        pendingCameraUri = ""
++        if (success && captured.isNotEmpty()) onImage(Uri.parse(captured))
++    }
++    TxTitle(label)
++    LocalPhoto(uri)
++    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
++        OutlinedButton(enabled = !importing, onClick = { picker.launch(arrayOf("image/*")) }, modifier = Modifier.weight(1f)) { Text(if (uri.isEmpty()) "Upload File" else "Replace Photo") }
++        if (camera) Button(enabled = !importing, onClick = {
++            try {
++                val folder = File(context.filesDir, "rider_media").apply { mkdirs() }
++                val file = File.createTempFile("capture_", ".jpg", folder)
++                val target = FileProvider.getUriForFile(context, "${context.packageName}.rider.files", file)
++                pendingCameraUri = target.toString()
++                capture.launch(target)
++            } catch (_: Exception) { pendingCameraUri = ""; error = "No camera app is available. Use Upload File instead." }
++        }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = TxAmber, contentColor = TxInk)) { Text("Camera") }
++    }
++    if (importing) LinearProgressIndicator(Modifier.fillMaxWidth())
++    error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
++}
++
++fun decodeImage(context: Context, value: String): Bitmap? = try {
++    val uri = Uri.parse(value)
++    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
++    context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
++    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) null else {
++        var sample = 1
++        while (bounds.outWidth / sample > 1200 || bounds.outHeight / sample > 1200) sample *= 2
++        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) }
++    }
++} catch (_: IOException) { null } catch (_: SecurityException) { null } catch (_: IllegalArgumentException) { null }
++
++private fun importImage(context: Context, source: Uri): String? {
++    val folder = File(context.filesDir, "rider_media").apply { mkdirs() }
++    val target = File(folder, "${UUID.randomUUID()}.image")
++    return try {
++        context.contentResolver.openInputStream(source)?.use { input ->
++            target.outputStream().use { output ->
++                val buffer = ByteArray(8192)
++                var count = 0L
++                while (true) {
++                    val read = input.read(buffer)
++                    if (read == -1) break
++                    count += read
++                    if (count > 15 * 1024 * 1024) throw IOException("Image too large")
++                    output.write(buffer, 0, read)
++                }
++            }
++        } ?: throw IOException("No readable stream")
++        val uri = Uri.fromFile(target).toString()
++        if (decodeImage(context, uri) == null) throw IOException("Invalid image")
++        uri
++    } catch (_: IOException) { target.delete(); null } catch (_: SecurityException) { target.delete(); null }
++}
+diff --git a/app/src/main/res/drawable-nodpi/fg_3_1701_imgsvg1.png b/app/src/main/res/drawable-nodpi/fg_3_1701_imgsvg1.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..2c3663e2a7c66fd89d206c5f380950ea54d31cc0
+GIT binary patch
+literal 1229
+zcmV;;1Ty=HP)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm00009a7bBm001mX
+z001mX0e5<IO#lD@8FWQhbW?9;ba!ELWdL_~cP?peYja~^aAhuUa%Y?FJQ@H11X@W%
+zK~!jg?U`MORAm^)f6tkjGi#c#x&-aTrr0#2EqzNySG7TOk-E@2YYHVMK{q93K{w&u
+z8m)O%Ay{7J&Wz;RjRk5~AtFIrM!P!;DwuWA2d*2;oHKKtE^?!tIdkT`XJ&R0{9O&t
+z^S;mf|MQ+R=lu{><yOX8Y5}cs+rUy2??~07YrD#}-76w10917@+3o$pbH#GIhmy9u
+z#K+P-Zj3?o^eKc*z&+H@t_NI3IWHn-6IS92hA#fu>d-A2aC7O6D*86cX23S=?tq*W
+zt9l?YH1l0l4Ur6#3hVkTjU7T6j5_c_6&$a+x_8-*;#K3WrUsmRY9}fm11n4iYr-tZ
+zt9Ev3%%oFz1N+5tGpU0LuSZcAS`a##$j<D8aKgeF*e{loPJN2-QmX<(@|m42?ha!j
+z)OWzmq(&D}Jism|pL#z`!=?tDd}^n{8>R|W`K02;dn<0dSK+W}f0VbJTza@!v%p8F
+zR9M$%d9j}`eqr@TdvfL>-ct|w_YusbCV+mkI?PrpdVkQrQ{W6(8aqUke;btx|A_}~
+z{=Q&b2Uf=7*1@0#4Gp+ssfSUvMi>+oDs?e%qtpT&a>p`{HOe+Lpq9J~NVGxQi=z7)
+z<@^ntSic(O`Hm?vMRY4C*01(U`5JH?ZxBd!RFoOE>r^-UC43DiI?!1?=BUcke(^@{
+zz~dd%5)IKO{KEAHj;`$j`Z}#A0&8w+TR@$G((>fpKx|PYnGq{3x9+M9))}ynb}y6X
+z>wcv0drLJuSy^AV0|@li#uC}72@83qRTH(;8Sv1#Hq?FA&80Wi23s}ZRlOUvu{r}?
+zf0us+s!;~`9|?u8{gwcU?9_yK)<6Uk)voT?Z?(btN9g5CCE$u-aUZnX6YrFpOFvkf
+zvA0kD5Md@R`5nvnzXQs7gTf6F=u!B_E!_KPZO(iq<eXpB*MOjBOoRrb-JWNC)o3PS
+zVuf1qit1UvxUYdkGCmGCMmmEAhaL|-?PnssZSq@Srb&r%!YiNjOZY!RgFpWP;@crA
+z^Cp~QnFkgm3jH>)D!8|f^Wv4i{4x!{17cMVn9B@Cphqq5OeLRr5`aR#UH04$2{xc&
+z$w<SRL3?5+e_sLRg{Xp?Pz31#?QYU;%+5}4Z<GxD5?5W_3(Q7Q7lKp>@z*PAy&2RX
+z(7>`C#jA+!F_zXYl-KSUp1c;+r0H77-d4;DI@&%}VUZDgc>43Et-_s+ia5E{5nxyA
+z!kVMVkz{syPuq?bLDkL{cO!hzs<`IJNLcX@<#;`p9tJ%O+!;k)0M}7{#U3smH|b=&
+zAF#7iW7Udo04V_NxMWsftfJNiQ}NL96;tXFRqGu@w_tt@QwALuOGXky)89wc(4I@a
+zLjNk)bG9f90Gog{)bFdSz-3g<iN)zerSxT^<$($9F;L5?RI)S|>z&_UdsS|9#bVbO
+ry4bb_;yj%(u!!99H}$s-EH(cC9{HYu=ggl_00000NkvXXu0mjfqUS#J
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/drawable-nodpi/fg_3_1809_imgsvg1.png b/app/src/main/res/drawable-nodpi/fg_3_1809_imgsvg1.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..1aaec9eeef432023f3fdbd284a020aa8108c1b40
+GIT binary patch
+literal 1026
+zcmeAS@N?(olHy`uVBq!ia0vp^2_VeD1|%QND7OGooCO|{#S9EOULed^URB}?6qGD+
+zjVKAuPb(=;EJ|f4FE7{2%*!rLPAo{(%P&fw{mw>;fq}W-)5S5QV$Rz+8}o!61={SD
+ztyEqp$uY{cH8pvZc+7}U`5<EBv}8epQlPWr!R{rC8`vE}SU6R<Y($<1J3ac5_C77Y
+z?EGiX<sRpL?fJL=^SgU@Zx{<Iet6tg&c1D~zylwS0yP#3VWv5pjOSVy(w!QN6%WkB
+zDy%S9_JL>t*PqDT<*SdE1(ln1TPJzGVajj3ef`gWbpv+0jB*L4FFFm^53E^ySEzz#
+z&-FJZEH5s!-7jLh!@RH5w8wJ6>?<D_-!ZVyYEw)wu051rxgb--`NG#Tjmf{{m+Wth
+zj_rLUykXwLhs-Pb-Ut*-W&P0h@Mg_b6E4R8#wlm^pHcT+JcIe%MjrcV3p*p)_OpBo
+zXyI36$T=+j!1C1Q1P;dH2OPUU#9#1vkhLwc;b_q2rM&+&zINW$TF~*q@RdWZh_Id8
+z+!dXR4jo^iyfq-^#|B%bE*|-9&JG(N9{$2AB5UUp?eOv8;S$ymLAx)n7i7lzu&r75
+z{P54Mb9Ek?uUD9~$yR8h@y>b1f;WBdEPuL9VB*uZe@i#Syw%U1A1w90>%{#at9@y!
+z^=do?3c_9Lru<-A^5}!Bi>;sBg)6%<W?qa*j#ugLeEDR@y!xCC`cJiA`OFooG6}7I
+zvVHcphwB^j-zYdgf4*q;<Sn&#&R=lfteC-J{6HXe<-AE**M7!k+&?hAas6el4Ksva
+zMLjQHP%FGjYC4~e+Ou8iced`m&>On)^o4aFx1CQ3|J$-V&pUICt>9_F11g87yD)Z~
+znCC1onK!<Q!@*@<*IV_(%R;3>-e-NI@2mGICVqN&nt^erYL4p<r9)>KxmQfS8sBYN
+zSv`;8?B7<;IVqVNH2k;6%}(B-|G%`3UCjNa;fJ1OI@KD+Iozq;eDZJJan8SR<w&%L
+zgxANz=UjF4k4;rrxaz~feOiZtok|}%&)YObI6?mDb(7wL{i|+HkNM85qy9{9)y#tH
+z6F;||kvJSU6{xG|zTj!ig}*)|&bf3%rr2p~^1sw$t9ZB05nd(tS>HIVaNW@Ylg`BF
+zO3C5w{1Xj!emJ<?W^aFsXB&UreSVLbGt`YAt~>nudXOB``x}3ZC-^t?D}PNd*~9Aa
+zd1>Etll>dZ>c8GdpB1&l`N8hs{ca0c7^BaI>{kxs#g)u)q<*OIGx=?fOQ)`HRWbnP
+OUj|QCKbLh*2~7a3x6Zu)
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/drawable-nodpi/fg_3_3017_imgcontainer6.png b/app/src/main/res/drawable-nodpi/fg_3_3017_imgcontainer6.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..25a539fda321e6649ca682f01b8f98ed5a7d7dd2
+GIT binary patch
+literal 537
+zcmV+!0_OdRP)<h;3K|Lk000e1NJLTq001Tc001Ni1^@s6<@HFV00009a7bBm001mX
+z001mX0e5<IO#lD@8FWQhbW?9;ba!ELWdL_~cP?peYja~^aAhuUa%Y?FJQ@H10j5br
+zK~z|U?Uyl50znjpzc;M0(SlQO1#0ayf!M1jFi2sfAyzh00r3WM0FY=$%^A=;XreYI
+zFwa6J>Z)<soq;X<tC^R)$(Mcq{F4<`rCybiwX_hnfDM+b7hq(BMth(WSCr!lC98~q
+z;*x>ldbBgjmp6I`V63H;11Nx^DRAL7W<I{WXxl9!VxH<=t1OeGRuTQQ-E<4HOo&DF
+z54NZxABXtN!Fp9n?SW1*gVn3@o`d2ia;!2w+LdzVQ3lAtqA75Z-D6>LaNCE+yyRd!
+z&vJV!a|`ArE`C#ON7gmsTwotSp(j(C-CKQKDcBt9#O(!6SVMu+zj}j?QsCfQQ8`S~
+z8`@*~L(L{>3<{>ui`PWCO41wDV=|@58j8M~AEBpH&Q=aKzkR19Fne6N&9U5q`55I3
+zpWe&Zo0nEkKEBw<!x>+s!YDJC5gNdw2Og&fV`*dtYY%i{XOw|H@SOELQOcd6-g}9Q
+z`EUJRn%=l4J43yP9N)@+utgOSCWq4M$t?^4awx4-K3GhE97?MPV`;dJ@ts2{^bGV}
+be!1cs=|_m4xQ%|P00000NkvXXu0mjfv+wHg
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/drawable-nodpi/fg_3_4288_imgjuandelacruzrider.png b/app/src/main/res/drawable-nodpi/fg_3_4288_imgjuandelacruzrider.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..fd93227071a7ed488044c1eec9ae9f29827dfd57
+GIT binary patch
+literal 4085
+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
+L)x&K@uRr|{58E}p
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/drawable-nodpi/fg_3_5368_imgsvg1.png b/app/src/main/res/drawable-nodpi/fg_3_5368_imgsvg1.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..6fbc2c790903bda6cf5c5762abe1834d87f143dd
+GIT binary patch
+literal 666
+zcmV;L0%iS)P)<h;3K|Lk000e1NJLTq002Ay002A)1^@s6I{evk00009a7bBm001mX
+z001mX0e5<IO#lD@8FWQhbW?9;ba!ELWdL_~cP?peYja~^aAhuUa%Y?FJQ@H10w+mC
+zK~!jg?b^X>6G0Tm@$XC)Jb3Yv?&fAfMF<t~=D~x;ga3#0&no^Co&;_2FDPOu1*P#4
+zvTH!RD6MX1JQYGA>yo^kdEM;qxEXl)Fq_$#%`@J6wkbCD7YLmW-1c<fwx<KPJzED(
+zVt;|<WLb6>?z{%O2krze-{g7zOR|R1veQb_QQGUdci!`O>GH9)f1k}}v)@v6RNT^O
+zI!di|hc~bQPp+<#eaTwU!Pi(|ykf|z>uV({xCR#BRI+9?a6PQ~-0PJGl69l3(pk2<
+zW378n^~|1?rGK?p$Sqh9VTQA8cgL9W1F%;y?5r%AEEeD9()ELaV`Cv8SOXRUfwf>E
+z09X?i8U|~_LW5w9SZD~W6$=f3HDf^-tQ`x2;M;%&A@E@Epl?ihL^bx*Ir}^&7Q|+_
+zJm5b^Jm>7BD9#I+dh2K7S3JYv@ZQCR{{fg4L)2hF!5fdz*%&;XPJe=VTQOv8tvgK9
+zQMzd@i3rVbvQPD^7&T}S@O=Jd;eGM~IH?#mw$^>@_wNrRYOWix-*BFP{qBA8l4|tB
+zB;hC~T6EF64QTOIT06Rt$C74rW6xo&=tegl8qtmKw6vjvY%MjRgYBiYpo1PBG@yf@
+zmSUr$wLH}QyVTl0Pg~LQP!#8db9O@IDa$`<Rm(#?bc<RZpcc9vEf34NMjOMY8y_7@
+zw>+rn(}FE)ObZniw{*yK;I^j&w>=%W?b$l;KYEp1AZw>`J^%m!07*qoM6N<$f{O7n
+AD*ylh
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/drawable-nodpi/fg_3_5368_imgsvg5.png b/app/src/main/res/drawable-nodpi/fg_3_5368_imgsvg5.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..1fe1e8d956a4fd4b1e1ff2b0d615b056a4b24b3e
+GIT binary patch
+literal 665
+zcmV;K0%rY*P)<h;3K|Lk000e1NJLTq002Ay002A)1^@s6I{evk00009a7bBm001mX
+z001mX0e5<IO#lD@8FWQhbW?9;ba!ELWdL_~cP?peYja~^aAhuUa%Y?FJQ@H10wzgB
+zK~!jg?V7z(!ax*8zZ=os%FzNePh;h~sU7s%`2fyX`UYypjDZ=GN(-$(xE2~GN^&8|
+z?&fC6X&4yD?8%<V&jw;<Y!gA#18_|z>^q&X?{vZdaCCHXN<?1n49YtXA08gh089ZM
+z_Ik_FbUJ-?KQuc?!n;3jKbYwXSX?H_<iY9aEKnpo2hjWfIWz8w_&iA_H_W_nF+kIl
+z63#FNc+|$+s|u%lFw+&$@*<9-N8_WjK#}k#fSocMYD@0Mgfpnl-G*?A%G`^D7ch7g
+zrYUzP!WqT@kM{O3jH2kx!uHqVS~#V#+>3;l0LaAvT<6}na0Vy2YZ6X*XQpdgxfcm*
+zSjuD~+%faeWbT@Uvlz?0Ey5|abI%nX3<mr2IYMTH07B*<3<6Hy_p#ZHg-t5wo+~W=
+zfT(wH(C-5XgW!8-00;s8dBuLI4c4br?xls-(O?}L<!)S9!ciS!?oNf*VWEzd+`U|i
+z&9E|?UD9<?aL_uB<LIgAOWkP+@cY6eci^)b{aJh?VkkM7|DJ1KUaDPMHa%0DlF9bD
+z*3E-vVJo+XMZydP3jkHKmC!W9#<G=YTG&dq5=|v-HCqYSGwdW=2`9pu9<@kG*X8%=
+zLXzltm}X;!8_!n4n6Rd7CF&-vGFyqNGpzb4zeFkFwqz@@Nz$#$R>I5wVoBr*6VX{5
+zKi@L*((!n#qiS8+1-`FKuh0qmPABX;TPOSlUFK05EVkLB00000NkvXXu0mjfTH-EF
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/drawable-nodpi/fg_3_5644_imgcontainer.png b/app/src/main/res/drawable-nodpi/fg_3_5644_imgcontainer.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..c59fe381c52c6356d7955a631f6edd980593b055
+GIT binary patch
+literal 972
+zcmV;-12g=IP)<h;3K|Lk000e1NJLTq001oj001or1^@s6IvV1d00009a7bBm001mX
+z001mX0e5<IO#lD@8FWQhbW?9;ba!ELWdL_~cP?peYja~^aAhuUa%Y?FJQ@H116fH#
+zK~z|U&Dl+B6G0dU@c*+(Y%A1D**2S`fgXe&Y750v?Zu`A?;?VqLn<EHU;={0FVTY@
+z1V4cEMG)*s3e_HZ35C3LlN1C&ls21vJTx1U?CfS=CW(K@q4U!HWtq&*&JZ(0R#a7;
+z93NM<nCS@!DF78PeH<IR$`uMff62NI$wF(IrbeQ?4`5MH{k>_>x~}V&GOne__$Mv!
+z0mNVcSd2vZ%iP>_T*mc6qdUO&`ZS$y7|LfE@KER$_z+_7p`dKOVJLf=rm11B8yMYj
+zhZlP57@RGasu>2o5OiG#J5&Op-G&5%vz1aU2LP3lzT*H7HB@|~y@IU_0`3d#7i>i~
+z+%q~T*osWJCv;e_6<P4UPsEOC%{EJbc)MJz<vWW~DeWy3UTPPZbW$$s&%4^BXSTp3
+z`l6>zgVy>zIbH8`-)XG}-1;KRV63-4#LK-+%Eekf%yj68mNg`t5@x6f(SrtC2@1EN
+zhXuA01m1-nHrR?^cpE(`uoXXW1sFZpidVRzs_JCxjl;gYB;Fnt*h;0O?|^t)P&MB$
+zluuK4r|u|Y6Ooq?y>SR09K%YvSj#)W7bpJS$|_(ywN;G}Y{d~y{8#~y>M1@LHP}ka
+zanMt&DFDhng_%@(W@|Vs_p}_Du0qCz0;YGi)=as;aHeAr_S+w(<G^6SqKb$=P$H4I
+zO-l0!z>=-!h{m?dD)8j`%3M_{mCB!{K^p*m*qSiqlCv|SU-7__oYgiRz-O_j`KVs6
+z|8B3R{jQsx5|78HqcOY(@BqM9qk(7DYPIgAuh(^U`!TNT`eoCgH2|l!E<VP1G|E}r
+z{CLIzWMVPld>a_tg_Z>;qGV4=Qrt2a*oFpVz<C#d+4{pYiFaj!0hf2gFk?KOPTXfU
+zSBR9OV)5deOt34u13r+|UvgI4B=8$S)mbcRK0H6KSDpI0zSy>gN(O@IkU+13PKRN@
+zfQNk#+3>Jnz~g3(EVv9X;A2}XEL;{C@VNmQ6fP4C1la2J3zrQB0&c2%g%1J@gglaS
+zeE{8@xvUAwJ#8|&CG<I>kJBw6<Q=vW`bf@gsPse%7?6Kry9d!55OC5oXyd;+u?24K
+uIGd3bFy#Rh09*qofbjbI%3PHN27rH9mau#rY|ViH0000<MNUMnLSTZd$F$@C
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/drawable-nodpi/fg_3_6067_imgcontainer12.png b/app/src/main/res/drawable-nodpi/fg_3_6067_imgcontainer12.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..a57c834ec1c3b7e96976d791c833f6d5f126b59e
+GIT binary patch
+literal 1131
+zcmV-x1eE)UP)<h;3K|Lk000e1NJLTq001Tc0015c1^@s6Koo3l00009a7bBm001mX
+z001mX0e5<IO#lD@8FWQhbW?9;ba!ELWdL_~cP?peYja~^aAhuUa%Y?FJQ@H11Nccq
+zK~z|U#g|QJTvZguf9K6iK8a1ijnpVaG!lZr%uGw0euz$HN<ro&t!dB_T)0rtQg9)*
+zUFbrkf@rE}bt{4yYi81onS3C&Au*jyLa-K8nu<l;C~1{A(@f?a7dG}~GB24)$Mo#(
+z|NPIr|9kFz=iDc%%I&fPA>V_R%14W0JbflUaoO%OZkH&t&EK6>CKcW7(#76=`|dBd
+z``sHYC>-8dBY&qq6yd3xsQAkkYu^T5SVBskv2b{2jiay4|FDrtCzp!?;7`OlX9r4_
+zvChs;S7z?=b1u<mfu>x)8E9!V3}YN9U+$4fvf33JNnWy}CCQk%*SjlobvB9UdkUNL
+zabm+$7e(l`L8@@lQ=4jyj!a(4<=;}q_V4xGWm$SckVAm1#h)khd=(xauti0liNzDA
+zow(}~*4f!qmbqGa1m!p)j&~~8;_;dJj=;8d%cZGU{QQ;GxJ3&y+q@y6q6g82)pFFi
+zV@KuZ<Kt<~DU^M~6F(HPjvM~HxC?W$2MyGx7}bt!(R)QCRLI1cn(K{bn|D8Ov=IIZ
+zVWCiSb)|aZBD5+36xRs^Ijd+huqluGm5zY-Y~OHlpjcr>6`nT*T8j+?uBd2N-(X@7
+zFz-ZCk#|L8%@1RRFch=Mn3TW?PbS?Mizj>6WD5=9pnrR@!rVZeZG6F{MtHRVOXXVM
+z@Wda*EFxHs0%LZpBj|r!(XQ2m+3ou2q4TrFELxB-)w^>sRqjNncZ%7N*M)@?{kF=@
+zSowjrt&Y2ZbsnYgOCIcZ1;^8I13v@z+!!}y#ahv~me0t78T6gf%8KLt{iA;sBrI!<
+z<YIk;iDSSqrx-&aR><TwD-$?uq|)D+A@9L8*~<6Pk?C)WTmvH|nWMmHv4KFHsC?ED
+z^nVRFb_-EGlG~OF5*Clo%zJ9<9|3t%RNq16V<4WxOFG~vx|{q}A3@$&Pt^yIe48;t
+z-p57d%uSZO7L6xfg{3AgJqQgBbN(6~oZRBn#0#~e%SCJ`8TV{XKLqkJisR*vjE$x8
+ziRuV!d%z5Bt;-j4OTqvmkqZma!NgmJiw4k7D6sQ~Le14`WTT?iw;e&>6D1e6WM2$S
+z{uUifcB`R#fSI-U)p$Mt8i7p;y=KtYll$9N5@Aag8%Un>)Yf}Zc~M|4AIA)|G^%1R
+zFCuWbe6e=4{W0Ht|BEnyNF<Vt4kg~tR#xPFNyLVyE?O$vfghK9)Q5|y+?rVOUb$K~
+z=pRZ<Ta^`FRX)ve-GLgr>_FZ(zf~?HWhvvo^rp+wd5>p3c0>4~_K^Q8R8Im`pos<d
+xwU_L?ymf4&%nY<NiWsMGXS<_cPXA>0{R92{c$;O}kWl~t002ovPDHLkV1k}C9L)d#
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/drawable-nodpi/fg_3_6067_imgcontainer7.png b/app/src/main/res/drawable-nodpi/fg_3_6067_imgcontainer7.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..127e9d880ae9dd61cb174ea25174f486a84cba1f
+GIT binary patch
+literal 1282
+zcmV+d1^xPoP)<h;3K|Lk000e1NJLTq001@s001Be1^@s6S;~uB00009a7bBm001mX
+z001mX0e5<IO#lD@8FWQhbW?9;ba!ELWdL_~cP?peYja~^aAhuUa%Y?FJQ@H11dmBX
+zK~z|U#h7h~RAm&$fB!pEyM>7_MQ!32rGh97+!B<e7ZR#@(IU;a-q!ZRx-&y!)HkJq
+zv?%qiDVqdEZ@NS}Gh1Y3nMNgQW>F%#5mdSck!i4QyECT`yR+@ynQ`yT?6`jzW;o9|
+z=lPw>opaA~WoA@EiKteavFbc7M=udKuT9$7YV7Y+BdJea*JZR;EBR;^2Cy&@RpW3@
+zE5e$Th-g_UiATFI%y1JSO)s>zGNQ}l5v}PJ#|##ik~cUqc=@s{2Ti={wF_<nZW&~%
+z$vU((g;c+(-Tne-3Tb@MVI>d;#+0+as?|J->4|w7*PG#>V9F2>Xs;EEx{M~^X<(cu
+zbhn$b+x_ly!EeQN+wF7!9t64v+YLfpMkla_{Gv+MsQky)r)<B$iULcQj?^Bb);wBL
+zwh4H%TKR*qh&uc@3ik8_d1~|f_J<$;<?}Vh>EZ#2hYcnd$yr+@{1+VV4fb*_XXpw1
+z|JxUDEKDig<Ftv@r)t>P)@GSP4vCPaXB`>^3xUf@f$?awo3f^IgG((er*9pHru92)
+zA3!Xst7R+&8h~rcg~^k##7*1V<%Fs^oIlnGE(R9S_gzdGj5iQ<z#Je@4!|%vBcpyp
+z+K!bPSoAp-i|7u)c3^C!bQS8**|W@ieK*~)xlC~~)Mc|sqSI~XxD_cNudt?&#s|f6
+z!~)=k3qkHf-xy35O!C-I0^53mJnwC4Lkdeo6g7Aam{@(*qUxfrTdIVZGZ+nS+TP0<
+z2A*TFh#IW#)*H>DknyC%GbM(NMYP2t8t9@9Kyy^H1+A2Jl}20!dnVMgIg@2)8Q~Ia
+zNQ8AKfEpXQsOBU`fT<qGe*|01_^L0AS->*NoVI<aOUASb^>qAski+Evzy0zY@2=x|
+z#X>AbyyaQ!2xgh{a=ZOJ*chLusbttm{za%<Vx^n3m*QcC5vfXe1P?ig`#ec9<}lBj
+z1i;;H9T@im1*eX3Ww5WahV=jv^DE^s5pmFvLm$A$Ej#RoVi0cH4kJD-vxY+IHfYF=
+zXa=(?<}s!_7*}|FzaNf7Sq}Sz9#(>9H>T{zL8iJ9;JM0yp;NQ0=)^rBQ=U(^AAkZn
+zbgqsU3goJo$1ynJak|Y1koSmww7Ztsz%C!LIrRiGJl5K3Jwx^%8J-i4Bfjt$r^TXL
+zQY=FvqNTu%gKdH@TifjKiM8A#c*h3_h_&lJu<yL)5#rhHn6Wi)Ph(3wqDLeRJg_Ax
+z7S^Li{+lQ3KMAjDvwz(*OAs#(Q`S%P@LZvV5#h<QRc1y!qMh^|J-j*!eBGCcnHbj=
+z@JYHUo9i{k!wSpEYXkr|8TPJgw<CqtfJ%8ja#MD95Fq2QERbbCaHYrTy8aJEj-w~&
+zrMb|8o3?Z@@ZnSePba-R4*j#@D?9906CuFY`;2~_LWJB8?Y9!ShgG>eCc-(Mf$6>_
+zX$JxUW&of2NV1Dw>fNLrDh=7cO62)0n_)&v(hlSd1y9h;QQZ|V7MQpd>p$Fy-(~E@
+scy~kEN@?pA>wG*Jv2A10KJmu<2Qqin3z`*p0000007*qoM6N<$f{HO$D*ylh
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/src/main/res/xml/rider_file_paths.xml b/app/src/main/res/xml/rider_file_paths.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..5cb8514d16e13c9d517b64951f3a3a87ed30eaf9
+--- /dev/null
++++ b/app/src/main/res/xml/rider_file_paths.xml
+@@ -0,0 +1,4 @@
++<?xml version="1.0" encoding="utf-8"?>
++<paths xmlns:android="http://schemas.android.com/apk/res/android">
++    <files-path name="rider_media" path="rider_media/" />
++</paths>
+diff --git a/app/src/test/java/com/tagoloanxpress/rider/RiderStateTest.kt b/app/src/test/java/com/tagoloanxpress/rider/RiderStateTest.kt
+new file mode 100644
+index 0000000000000000000000000000000000000000..1ebca633de3bad8ee8ad9d665b0daaf5cdbb7197
+--- /dev/null
++++ b/app/src/test/java/com/tagoloanxpress/rider/RiderStateTest.kt
+@@ -0,0 +1,85 @@
++package com.tagoloanxpress.rider
++
++import com.tagoloanxpress.rider.model.*
++import org.junit.Assert.*
++import org.junit.Test
++
++class RiderStateTest {
++    @Test fun pendingAndOfflineRidersCannotAccept() {
++        val pending = RiderState(approval = Approval.PENDING)
++        assertEquals(pending, pending.accept())
++        val offline = RiderState(accepting = false)
++        assertEquals(offline, offline.accept())
++        val missingProfile = RiderState(profileReady = false)
++        assertEquals(missingProfile, missingProfile.accept())
++    }
++
++    @Test fun deliveryStagesCannotBeSkipped() {
++        val available = RiderState()
++        assertEquals(available, available.arriveAtStore())
++        assertEquals(available, available.startDelivery(19500))
++        assertEquals(available, available.arriveAtCustomer())
++        assertEquals(available, available.complete(100))
++        val toStore = available.accept()
++        assertTrue(toStore.busy)
++        assertFalse(toStore.available)
++        assertEquals(toStore, toStore.startDelivery(19500))
++    }
++
++    @Test fun receiptAndPositiveAmountAreRequired() {
++        val buying = RiderState().accept().arriveAtStore()
++        assertEquals(buying, buying.startDelivery(19500))
++        val receipt = buying.copy(receipt = "file:///receipt.jpg")
++        assertEquals(receipt, receipt.startDelivery(0))
++        assertEquals(receipt, receipt.startDelivery(-1))
++        assertEquals(receipt, receipt.startDelivery(100000000))
++        assertEquals(DeliveryStage.DELIVERING, receipt.startDelivery(19500).stage)
++    }
++
++    @Test fun completionRequiresPhotoAndBothConfirmations() {
++        val arrived = atCustomer()
++        assertFalse(arrived.canComplete)
++        assertEquals(arrived, arrived.complete(100))
++        assertFalse(arrived.copy(handover = "photo").canComplete)
++        assertFalse(arrived.copy(handover = "photo", receiptHandedOver = true).canComplete)
++        assertTrue(arrived.copy(handover = "photo", receiptHandedOver = true, cashCollected = true).canComplete)
++    }
++
++    @Test fun completionRecordsFeeNotCashCollectionAndIsIdempotent() {
++        val ready = atCustomer().copy(handover = "file:///proof.jpg", receiptHandedOver = true, cashCollected = true)
++        val done = ready.complete(12345)
++        assertEquals(DeliveryStage.COMPLETED, done.stage)
++        assertFalse(done.busy)
++        assertTrue(done.accepting)
++        assertFalse(done.available)
++        assertEquals(6000L, done.earnings)
++        assertEquals(25500L, done.trips.single().total)
++        assertEquals(19500L, done.trips.single().productCost)
++        assertEquals("file:///proof.jpg", done.trips.single().handover)
++        assertEquals(12345L, done.trips.single().completedAt)
++        assertEquals(done, done.complete(99999))
++        assertEquals(done, done.accept())
++    }
++
++    @Test fun confirmedCostCannotBeRestartedDuringDelivery() {
++        val delivering = RiderState(stage = DeliveryStage.BUYING, receipt = "photo").startDelivery(19500)
++        assertEquals(delivering, delivering.startDelivery(34000))
++        assertEquals(19500L, delivering.confirmedCost)
++    }
++
++    @Test fun declinedRequestIsUnavailable() {
++        val declined = RiderState(stage = DeliveryStage.DECLINED)
++        assertFalse(declined.available)
++        assertEquals(declined, declined.accept())
++    }
++
++    @Test fun moneyParsingRejectsRoundingAndInvalidValues() {
++        assertEquals(19500L, parseRiderCentavos("195.00"))
++        assertEquals(1L, parseRiderCentavos("0.01"))
++        assertEquals(99999999L, parseRiderCentavos("999999.99"))
++        listOf("", "0", "-1", "1.999", "NaN", "1e3", "1,000", "1000000", ".50").forEach { assertNull(it, parseRiderCentavos(it)) }
++        assertEquals("₱255.00", riderMoney(25500))
++    }
++
++    private fun atCustomer(): RiderState = RiderState().accept().arriveAtStore().copy(receipt = "file:///receipt.jpg").startDelivery(19500).arriveAtCustomer()
++}

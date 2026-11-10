@@ -88,23 +88,25 @@ fun RiderActiveDeliveryScreen(
     onArrivedAtStore: () -> Unit,
     onOpenReceipt: () -> Unit,
     onBackClick: () -> Unit,
+    onArrivedAtCustomer: () -> Unit,
+    onOpenChat: () -> Unit,
+    onOpenFallback: () -> Unit,
 ) {
-    var message by rememberSaveable { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         DeliveryHeader("Active Pasugo #TGX-8921", "● BUSY", onBackClick)
-        val totalCentavos = productCostCentavos + 6000L
+        val totalCentavos = (if (deliveryStarted) productCostCentavos else 20000L) + 6000L
         Panel(Color(0xFFECEAE2)) { Text(if (deliveryStarted) "Heading to customer" else "Route preview", fontSize = 18.sp, fontWeight = FontWeight.Bold); Caption("Map and GPS will be connected later."); LocationBlock("PICKUP", "Minute Burger, Poblacion", "Sample ETA: 4 min", Amber); LocationBlock("DROP-OFF", "Zone 3, Mohon", "Total: 2.0 km • COD: ${deliveryMoney(totalCentavos)}", Color(0xFF21C98E)) }
         Panel {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Image(painterResource(R.drawable.delivery_customer), "Neil Dairo", contentScale = ContentScale.Crop, modifier = Modifier.size(44.dp).clip(CircleShape)); Column(Modifier.weight(1f)) { Text("Neil Dairo", fontWeight = FontWeight.Bold); Caption("CUSTOMER"); Caption("Zone 3, Mohon (near Chapel)") }; Text("+₱60.00", fontWeight = FontWeight.ExtraBold, color = Color(0xFF008F64)) }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton({ message = "Chat UI will be connected in a later step." }, Modifier.weight(1f)) { Text("💬 CHAT") }; Button({ message = "Calling is unavailable for this sample customer." }, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Ink)) { Text("📞 CALL") } }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedButton(onOpenChat, Modifier.weight(1f)) { Text("💬 CHAT") }; Button(onOpenFallback, Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Ink)) { Text("📞 CALL") } }
         }
         Panel { Text("🍔 Minute Burger (x2 Packs)", fontWeight = FontWeight.Bold); Caption(if (deliveryStarted) "Product cost: ${deliveryMoney(productCostCentavos)} • Cash on Delivery" else "Advance: ₱200.00 • Cash on Delivery"); SummaryRow("Collect from customer", if (deliveryStarted) deliveryMoney(totalCentavos) else "₱260.00"); if (deliveryStarted) DeliveryButton("VIEW RECEIPT", R.drawable.receipt_next) { onOpenReceipt() } }
         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("1 To Store", color = if (!arrivedAtStore && !deliveryStarted) Ink else Muted, fontWeight = FontWeight.Bold, fontSize = 12.sp); Text("2 Buying", color = if (arrivedAtStore && !deliveryStarted) Ink else Muted, fontWeight = FontWeight.Bold, fontSize = 12.sp); Text("3 Deliver", color = if (deliveryStarted) Ink else Muted, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
         Notice(if (deliveryStarted) "● STEP 3: Heading to customer" else if (arrivedAtStore) "● STEP 2: At store — purchase items and upload receipt." else "● STEP 1: Heading to Pickup Store")
         if (!deliveryStarted) DeliveryButton(if (arrivedAtStore) "CONTINUE TO RECEIPT" else "MARK AS ARRIVED AT STORE", null, Ink) { if (arrivedAtStore) onOpenReceipt() else onArrivedAtStore() }
+        if (deliveryStarted) DeliveryButton("MARK AS ARRIVED AT CUSTOMER", null, Ink, onArrivedAtCustomer)
         Caption("UI demo • Status changes stay on this device.")
     }
-    message?.let { AlertDialog(onDismissRequest = { message = null }, title = { Text("Demo information") }, text = { Text(it) }, confirmButton = { TextButton({ message = null }) { Text("Close") } }) }
 }
 
 @Composable private fun DeliveryHeader(title: String, badge: String, onBack: () -> Unit) { Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { IconButton(onBack) { LocalIcon(R.drawable.delivery_back, 24) }; Text(title, Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.Bold); Text(badge, Modifier.background(if (badge.contains("BUSY")) Color(0xFFFFEBEE) else Amber, RoundedCornerShape(20.dp)).padding(10.dp, 6.dp), color = if (badge.contains("BUSY")) Color(0xFFC62828) else Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold) } }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -45,6 +46,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tagoloanxpress.R
+import com.tagoloanxpress.rider.model.*
+import com.tagoloanxpress.rider.ui.shared.*
+import com.tagoloanxpress.rider.ui.delivery.RiderCompletionScreen
+import com.tagoloanxpress.rider.ui.history.*
+import com.tagoloanxpress.rider.ui.profile.*
+import com.tagoloanxpress.rider.ui.messages.*
+import com.tagoloanxpress.rider.ui.onboarding.RiderProfileSetupScreen
 import com.tagoloanxpress.rider.ui.delivery.RiderActiveDeliveryScreen
 import com.tagoloanxpress.rider.ui.delivery.RiderRequestDetailsScreen
 import com.tagoloanxpress.rider.ui.receipt.RiderStoreReceiptScreen
@@ -55,136 +63,119 @@ private val Cream = Color(0xFFFBF9F1)
 private val Muted = Color(0xFF504533)
 
 @Composable
-fun RiderDashboardScreen(onLogoutClick: () -> Unit) {
-    var accepting by rememberSaveable { mutableStateOf(true) }
+fun RiderDashboardScreen(store: RiderStore, onLogoutClick: () -> Unit) {
+    val s = store.state
     var tab by rememberSaveable { mutableStateOf("Home") }
-    var dialog by rememberSaveable { mutableStateOf<String?>(null) }
-    var showRequestDetails by rememberSaveable { mutableStateOf(false) }
-    var requestAccepted by rememberSaveable { mutableStateOf(false) }
-    var requestDeclined by rememberSaveable { mutableStateOf(false) }
-    var arrivedAtStore by rememberSaveable { mutableStateOf(false) }
-    var showReceiptScreen by rememberSaveable { mutableStateOf(false) }
-    var actualCostInput by rememberSaveable { mutableStateOf("") }
-    var receiptUri by rememberSaveable { mutableStateOf<String?>(null) }
-    var deliveryStarted by rememberSaveable { mutableStateOf(false) }
-    var confirmedProductCostCentavos by rememberSaveable { mutableStateOf(0L) }
+    var route by rememberSaveable { mutableStateOf("") }
+    var showLogout by rememberSaveable { mutableStateOf(false) }
+    var selectedTrip by rememberSaveable { mutableStateOf("") }
 
-    if (showReceiptScreen) {
-        RiderStoreReceiptScreen(
-            actualCostInput = actualCostInput,
-            onActualCostChange = { actualCostInput = it },
-            receiptUri = receiptUri,
-            onReceiptUriChange = { receiptUri = it },
-            onBackClick = { showReceiptScreen = false },
-            onStartDelivery = {
-                confirmedProductCostCentavos = it
-                deliveryStarted = true
-                showReceiptScreen = false
-                tab = "Active"
-            },
-        )
-        return
+    when (route) {
+        "receipt" -> {
+            if (s.stage == DeliveryStage.BUYING) RiderStoreReceiptScreen(
+                actualCostInput = s.draftCost,
+                onActualCostChange = { value -> store.update { it.copy(draftCost = value) } },
+                receiptUri = s.receipt.ifBlank { null },
+                onReceiptUriChange = { value -> store.update { it.copy(receipt = value.orEmpty()) } },
+                onBackClick = { route = "" },
+                onStartDelivery = { cost -> store.update { it.startDelivery(cost) }; route = ""; tab = "Active" },
+            ) else RiderPage("Confirmed Store Receipt", { route = "" }) {
+                TxPanel { TxRow("Product cost", riderMoney(s.confirmedCost)); TxRow("Delivery fee", riderMoney(RiderState.FEE)); TxRow("COD total", riderMoney(s.total)); LocalPhoto(s.receipt, 320) }
+                TxCaption("This confirmed receipt cannot be edited after starting delivery.")
+            }
+            return
+        }
+        "details" -> {
+            RiderRequestDetailsScreen(
+                onBackClick = { route = "" },
+                onAccepted = { store.update { it.accept() }; route = ""; tab = "Active" },
+                onDeclined = { store.update { if (it.available) it.copy(stage = DeliveryStage.DECLINED) else it }; route = "" },
+            )
+            return
+        }
+        "trip" -> {
+            val trip = s.trips.find { it.id == selectedTrip }
+            if (trip != null) RiderTripScreen(trip) { route = "" }
+            else RiderPage("Trip unavailable", { route = "" }) { TxText("This trip is no longer recorded on this device.") }
+            return
+        }
+        "vehicle" -> { RiderVehicleScreen(store) { route = "" }; return }
+        "photo" -> { RiderProfileSetupScreen(store, { route = "" }, { route = "" }); return }
+        "security" -> {
+            RiderPage("Account Security", { route = "" }) {
+                TxPanel { TxTitle("Demo account"); TxText("This prototype does not store a login password. Password changes and password recovery require the authentication backend."); TxCaption("Your photos and delivery records are stored on this device. Signing out keeps them for your next demo session.") }
+                TxButton("BACK TO PROFILE", white = true) { route = "" }
+            }
+            return
+        }
+        "chat" -> { RiderChatScreen(store, { route = "" }, { route = "fallback" }); return }
+        "fallback" -> { RiderFallbackScreen { route = if (s.busy) "chat" else "" }; return }
+        "notifications" -> {
+            RiderNotificationsScreen(store, { route = "" }, { route = "details" }, { route = ""; tab = if (s.busy) "Active" else "History" })
+            return
+        }
     }
-    if (showRequestDetails) {
-        RiderRequestDetailsScreen(
-            onBackClick = { showRequestDetails = false },
-            onAccepted = {
-                requestAccepted = true
-                showRequestDetails = false
-                tab = "Active"
-            },
-            onDeclined = {
-                requestDeclined = true
-                showRequestDetails = false
-            },
-        )
-        return
-    }
-    BackHandler { if (tab == "Home") dialog = "Sign out" else tab = "Home" }
-    Column(Modifier.fillMaxSize().background(Cream)) {
+    BackHandler { if (tab == "Home") showLogout = true else tab = "Home" }
+    Column(Modifier.fillMaxSize().background(Cream).safeDrawingPadding()) {
         Row(Modifier.fillMaxWidth().padding(16.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Column { Text("RIDER PORTAL", fontSize = 18.sp, fontWeight = FontWeight.Bold); Text(tab, color = Muted, fontSize = 11.sp) }
+            Column(Modifier.weight(1f)) { Text("RIDER PORTAL", fontSize = 18.sp, fontWeight = FontWeight.Bold); Text(tab, color = Muted, fontSize = 11.sp) }
+            TextButton(onClick = { route = "notifications" }) { Text(if (s.notificationsRead) "Alerts" else "Alerts •") }
             Image(painterResource(R.drawable.rider_dashboard_avatar), "Open rider profile", modifier = Modifier.size(36.dp).clip(CircleShape).border(2.dp, Amber, CircleShape).clickable { tab = "Profile" }, contentScale = ContentScale.Crop)
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text("UI DEMO • Sample rider and requests", fontSize = 11.sp, color = Muted)
+            Text("UI DEMO • Records stay on this device", fontSize = 11.sp, color = Muted)
             when (tab) {
                 "Home" -> {
-                    Identity()
+                    Column { Identity(s.name, s.busy, s.accepting) }
                     Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
-                        Stat("Earnings", "₱0.00", "Today", Modifier.weight(1f))
-                        Stat("Completed", "0", "Deliveries", Modifier.weight(1f))
-                        Stat("Score", "5.0", "Top Tier", Modifier.weight(1f), R.drawable.rd_star)
+                        Stat("Earnings", riderMoney(s.earnings), "Recorded fees", Modifier.weight(1f))
+                        Stat("Completed", s.trips.size.toString(), "Deliveries", Modifier.weight(1f))
+                        Stat("Score", "5.0", "Sample rating", Modifier.weight(1f), R.drawable.rd_star)
                     }
-                    Availability(accepting, requestAccepted) { accepting = !accepting }
-                    Requests(accepting, !requestAccepted && !requestDeclined) { showRequestDetails = true }
+                    Availability(s.accepting, s.busy) { store.update { if (!it.busy) it.copy(accepting = !it.accepting) else it } }
+                    Requests(s.accepting, s.available) { route = "details" }
+                    if (s.stage == DeliveryStage.DECLINED) TxButton("RESTORE DECLINED SAMPLE REQUEST", white = true) { store.update { it.copy(stage = DeliveryStage.AVAILABLE) } }
                     Tip()
                 }
-                "Requests" -> Requests(accepting, !requestAccepted && !requestDeclined) { showRequestDetails = true }
-                "Active" -> if (requestAccepted) {
-                    RiderActiveDeliveryScreen(
-                        arrivedAtStore = arrivedAtStore,
-                        deliveryStarted = deliveryStarted,
-                        productCostCentavos = confirmedProductCostCentavos,
-                        onArrivedAtStore = { arrivedAtStore = true },
-                        onOpenReceipt = { showReceiptScreen = true },
+                "Requests" -> Requests(s.accepting, s.available) { route = "details" }
+                "Active" -> when {
+                    s.stage == DeliveryStage.AT_CUSTOMER -> RiderCompletionScreen(store) { tab = "History" }
+                    s.busy -> RiderActiveDeliveryScreen(
+                        arrivedAtStore = s.stage != DeliveryStage.TO_STORE,
+                        deliveryStarted = s.stage == DeliveryStage.DELIVERING,
+                        productCostCentavos = s.confirmedCost,
+                        onArrivedAtStore = { store.update { it.arriveAtStore() } },
+                        onOpenReceipt = { route = "receipt" },
                         onBackClick = { tab = "Home" },
+                        onArrivedAtCustomer = { store.update { it.arriveAtCustomer() } },
+                        onOpenChat = { route = "chat" },
+                        onOpenFallback = { route = "fallback" },
                     )
-                } else InfoCard("No active delivery", "You haven't accepted a request in this demo.")
-                "History" -> InfoCard("No completed deliveries", "Delivery history will appear here when implemented.")
-                "Profile" -> {
-                    InfoCard("Juan • TX-RDR-8924", "Sample rider profile • Misamis Oriental")
-                    Button({
-                    requestAccepted = false
-                    requestDeclined = false
-                    arrivedAtStore = false
-                    showReceiptScreen = false
-                    actualCostInput = ""
-                    receiptUri = null
-                    deliveryStarted = false
-                    confirmedProductCostCentavos = 0L
-                    accepting = true
-                    dialog = "Sign out"
-                    }, colors = ButtonDefaults.buttonColors(containerColor = Ink)) { Text("SIGN OUT OF DEMO") }
+                    else -> InfoCard("No active delivery", "Accepted requests appear here. Completed trips are in History.")
                 }
+                "History" -> RiderHistoryContent(s.trips) { selectedTrip = it; route = "trip" }
+                "Profile" -> RiderProfileContent(store, { tab = "History" }, { route = "vehicle" }, { route = "photo" }, { route = "security" }, { showLogout = true })
             }
+            Spacer(Modifier.height(12.dp))
         }
         Navigation(tab) { tab = it }
     }
-    dialog?.let { title ->
-        AlertDialog(
-            onDismissRequest = { dialog = null },
-            title = { Text(title) },
-            text = { Text(if (title == "Sign out") "Return to the rider login screen?" else "Minute Burger\nQty: 2 Buy 1 Take 1 Packs\n\nPickup: Minute Burger, Tagoloan Poblacion\nDelivery: Zone 3, Mohon (near Chapel)\nDistance: 2.0 km • Estimated trip: 12 mins\nPayment: Cash on Delivery\nDelivery fee: ₱60.00\n\nSample request only.") },
-            confirmButton = {
-                TextButton({
-                    dialog = null
-                    if (title == "Sign out") {
-                        requestAccepted = false
-                        requestDeclined = false
-                        arrivedAtStore = false
-                        showReceiptScreen = false
-                        actualCostInput = ""
-                        receiptUri = null
-                        deliveryStarted = false
-                        confirmedProductCostCentavos = 0L
-                        accepting = true
-                        onLogoutClick()
-                    }
-                }) { Text(if (title == "Sign out") "Sign out" else "Close") }
-            },
-            dismissButton = { if (title == "Sign out") TextButton({ dialog = null }) { Text("Cancel") } },
-        )
-    }
+    if (showLogout) AlertDialog(
+        onDismissRequest = { showLogout = false },
+        title = { Text("Sign out?") },
+        text = { Text("Return to rider login? Your delivery draft and completed trips will remain on this device.") },
+        confirmButton = { TextButton(onClick = { showLogout = false; onLogoutClick() }) { Text("Sign out") } },
+        dismissButton = { TextButton(onClick = { showLogout = false }) { Text("Cancel") } },
+    )
 }
 
-@Composable private fun Identity() {
+@Composable private fun Identity(name: String, busy: Boolean, accepting: Boolean) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.dashboardSurface(Amber, 24).padding(10.dp, 6.dp), verticalAlignment = Alignment.CenterVertically) { Asset(R.drawable.rd_badge, 14.dp, 14.dp); Text("TX-RDR-8924", fontSize = 11.sp, color = Muted) }
         Text("Misamis Oriental", Modifier.weight(1f), fontSize = 11.sp, color = Muted)
-        Text("Shift Active", fontSize = 11.sp, color = Muted)
+        Text(if (busy) "Busy" else if (accepting) "Shift Active" else "Off duty", fontSize = 11.sp, color = Muted)
     }
-    Spacer(Modifier.height(8.dp)); Text("Maayong Adlaw, Juan! 👋", fontSize = 18.sp, fontWeight = FontWeight.Bold); Text("Ready for Tagoloan express dispatches", fontSize = 11.sp, color = Muted)
+    Spacer(Modifier.height(8.dp)); Text("Maayong Adlaw, ${name.substringBefore(' ')}! 👋", fontSize = 18.sp, fontWeight = FontWeight.Bold); Text("Ready for Tagoloan express dispatches", fontSize = 11.sp, color = Muted)
 }
 
 @Composable private fun Stat(label: String, value: String, caption: String, modifier: Modifier, @DrawableRes icon: Int? = null) {

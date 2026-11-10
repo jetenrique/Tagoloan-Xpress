@@ -33,8 +33,7 @@ import com.tagoloanxpress.customer.ui.profile.CustomerProfileScreen
 import com.tagoloanxpress.customer.ui.receipt.CustomerReceiptReviewScreen
 import com.tagoloanxpress.customer.ui.receipt.CustomerViewReceiptScreen
 import com.tagoloanxpress.customer.ui.tracking.CustomerActiveTrackingScreen
-import com.tagoloanxpress.rider.ui.login.RiderLoginScreen
-import com.tagoloanxpress.rider.ui.dashboard.RiderDashboardScreen
+import com.tagoloanxpress.rider.RiderPortal
 import com.tagoloanxpress.ui.welcome.WelcomePortalScreen
 
 class MainActivity : ComponentActivity() {
@@ -47,7 +46,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun TagoloanApp() {
-    var screen by remember { mutableStateOf("welcome") }
+    var screen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("welcome") }
     var login by remember { mutableStateOf(CustomerLoginUiState()) }
     var registration by remember { mutableStateOf(CustomerRegistrationUiState()) }
     var step1 by remember { mutableStateOf(CreatePasugoStep1UiState()) }
@@ -62,23 +61,7 @@ private fun TagoloanApp() {
             onRiderClick = { screen = "rider_login" },
             onAdminClick = {},
         )
-        "rider_login" -> RiderLoginScreen(
-            onBackClick = { screen = "welcome" },
-            onDemoLoginClick = { screen = "rider_dashboard" },
-            onRegisterClick = {
-                coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Rider registration is coming next.")
-                }
-            },
-            onForgotPasswordClick = {
-                coroutineScope.launch {
-                    snackbarHostState.showSnackbar("Password recovery requires backend integration.")
-                }
-            },
-        )
-        "rider_dashboard" -> RiderDashboardScreen(
-            onLogoutClick = { screen = "rider_login" },
-        )
+        "rider_login" -> RiderPortal(onExit = { screen = "welcome" })
         "customer_login" -> CustomerLoginScreen(
             state = login,
             onIdentifierChange = { login = login.copy(identifier = it) },
