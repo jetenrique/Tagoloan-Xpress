@@ -8,7 +8,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
 import com.tagoloanxpress.customer.ui.create.CreatePasugoStep1Screen
 import com.tagoloanxpress.customer.ui.create.CreatePasugoStep1UiState
 import com.tagoloanxpress.customer.ui.create.CreatePasugoStep2Screen
@@ -25,6 +33,8 @@ import com.tagoloanxpress.customer.ui.profile.CustomerProfileScreen
 import com.tagoloanxpress.customer.ui.receipt.CustomerReceiptReviewScreen
 import com.tagoloanxpress.customer.ui.receipt.CustomerViewReceiptScreen
 import com.tagoloanxpress.customer.ui.tracking.CustomerActiveTrackingScreen
+import com.tagoloanxpress.rider.ui.login.RiderLoginScreen
+import com.tagoloanxpress.rider.ui.dashboard.RiderDashboardScreen
 import com.tagoloanxpress.ui.welcome.WelcomePortalScreen
 
 class MainActivity : ComponentActivity() {
@@ -42,12 +52,32 @@ private fun TagoloanApp() {
     var registration by remember { mutableStateOf(CustomerRegistrationUiState()) }
     var step1 by remember { mutableStateOf(CreatePasugoStep1UiState()) }
     var deliveryAddress by remember { mutableStateOf("Zone 3, Mohon, Tagoloan") }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
-    when (screen) {
+    Box(Modifier.fillMaxSize()) {
+      when (screen) {
         "welcome" -> WelcomePortalScreen(
             onCustomerClick = { screen = "customer_login" },
-            onRiderClick = {},
+            onRiderClick = { screen = "rider_login" },
             onAdminClick = {},
+        )
+        "rider_login" -> RiderLoginScreen(
+            onBackClick = { screen = "welcome" },
+            onDemoLoginClick = { screen = "rider_dashboard" },
+            onRegisterClick = {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Rider registration is coming next.")
+                }
+            },
+            onForgotPasswordClick = {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Password recovery requires backend integration.")
+                }
+            },
+        )
+        "rider_dashboard" -> RiderDashboardScreen(
+            onLogoutClick = { screen = "rider_login" },
         )
         "customer_login" -> CustomerLoginScreen(
             state = login,
@@ -157,5 +187,10 @@ private fun TagoloanApp() {
             onNavigateHistory = { screen = "customer_history" },
             onBackClick = { screen = "customer_dashboard" },
         )
+      }
+      SnackbarHost(
+          hostState = snackbarHostState,
+          modifier = Modifier.align(Alignment.BottomCenter),
+      )
     }
 }
