@@ -56,11 +56,12 @@ import com.tagoloanxpress.rider.ui.onboarding.RiderProfileSetupScreen
 import com.tagoloanxpress.rider.ui.delivery.RiderActiveDeliveryScreen
 import com.tagoloanxpress.rider.ui.delivery.RiderRequestDetailsScreen
 import com.tagoloanxpress.rider.ui.receipt.RiderStoreReceiptScreen
+import com.tagoloanxpress.ui.designsystem.TxRefresh
 
-private val Ink = Color(0xFF1B1C17)
-private val Amber = Color(0xFFFEBC20)
-private val Cream = Color(0xFFFBF9F1)
-private val Muted = Color(0xFF504533)
+private val Ink = TxRefresh.Ink
+private val Amber = TxRefresh.Amber
+private val Cream = TxRefresh.Background
+private val Muted = TxRefresh.Muted
 
 @Composable
 fun RiderDashboardScreen(store: RiderStore, onLogoutClick: () -> Unit) {
@@ -126,16 +127,14 @@ fun RiderDashboardScreen(store: RiderStore, onLogoutClick: () -> Unit) {
             Text("UI DEMO • Records stay on this device", fontSize = 11.sp, color = Muted)
             when (tab) {
                 "Home" -> {
-                    Column { Identity(s.name, s.busy, s.accepting) }
+                    Availability(s.accepting, s.busy) { store.update { if (!it.busy) it.copy(accepting = !it.accepting) else it } }
                     Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp)) {
                         Stat("Earnings", riderMoney(s.earnings), "Recorded fees", Modifier.weight(1f))
                         Stat("Completed", s.trips.size.toString(), "Deliveries", Modifier.weight(1f))
                         Stat("Score", "5.0", "Sample rating", Modifier.weight(1f), R.drawable.rd_star)
                     }
-                    Availability(s.accepting, s.busy) { store.update { if (!it.busy) it.copy(accepting = !it.accepting) else it } }
                     Requests(s.accepting, s.available) { route = "details" }
                     if (s.stage == DeliveryStage.DECLINED) TxButton("RESTORE DECLINED SAMPLE REQUEST", white = true) { store.update { it.copy(stage = DeliveryStage.AVAILABLE) } }
-                    Tip()
                 }
                 "Requests" -> Requests(s.accepting, s.available) { route = "details" }
                 "Active" -> when {
@@ -212,4 +211,4 @@ fun RiderDashboardScreen(store: RiderStore, onLogoutClick: () -> Unit) {
 @Composable private fun InfoCard(title: String, body: String) { Column(Modifier.fillMaxWidth().dashboardSurface(Color.White, 16).padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text(title, fontWeight = FontWeight.Bold); Text(body, fontSize = 13.sp, color = Muted) } }
 @Composable private fun Navigation(selected: String, onSelect: (String) -> Unit) { Row(Modifier.fillMaxWidth().background(Color.White).padding(vertical = 8.dp)) { listOf("Home" to R.drawable.rd_home, "Requests" to R.drawable.rd_requests, "Active" to R.drawable.rd_active, "History" to R.drawable.rd_history, "Profile" to R.drawable.rd_profile).forEach { (label, icon) -> Column(Modifier.weight(1f).clickable { onSelect(label) }, horizontalAlignment = Alignment.CenterHorizontally) { Box(Modifier.size(40.dp, 28.dp).background(if (selected == label) Amber else Color.Transparent, CircleShape), Alignment.Center) { Asset(icon, 18.dp, 16.dp) }; Text(label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Muted) } } } }
 @Composable private fun Asset(@DrawableRes id: Int, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp) { Image(painterResource(id), null, Modifier.size(width, height)) }
-private fun Modifier.dashboardSurface(color: Color, radius: Int): Modifier { val shape = RoundedCornerShape(radius.dp); return drawBehind { drawRoundRect(Ink, Offset(2.dp.toPx(), 3.dp.toPx()), size, CornerRadius(radius.dp.toPx())) }.background(color, shape).border(2.dp, Ink, shape) }
+private fun Modifier.dashboardSurface(color: Color, radius: Int): Modifier { val shape = RoundedCornerShape(radius.dp); return background(color, shape).border(1.dp, TxRefresh.Border, shape) }

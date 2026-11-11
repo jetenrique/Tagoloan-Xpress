@@ -28,12 +28,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.tagoloanxpress.R
+import com.tagoloanxpress.ui.designsystem.TxRefresh
 import java.util.Locale
 
-private val Ink = Color(0xFF18181F)
-private val Amber = Color(0xFFFEBC20)
-private val Cream = Color(0xFFFFFDF5)
-private val Muted = Color(0xFF555555)
+private val Ink = TxRefresh.Ink
+private val Amber = TxRefresh.Amber
+private val Cream = TxRefresh.Background
+private val Muted = TxRefresh.Muted
 
 @Composable
 fun RiderRequestDetailsScreen(onBackClick: () -> Unit, onAccepted: () -> Unit, onDeclined: () -> Unit) {
@@ -117,5 +118,5 @@ fun RiderActiveDeliveryScreen(
 @Composable private fun Notice(text: String) { Text(text, Modifier.fillMaxWidth().background(Color(0xFFFFF8E1), RoundedCornerShape(12.dp)).border(1.dp, Amber, RoundedCornerShape(12.dp)).padding(12.dp), fontSize = 12.sp, color = Ink) }
 @Composable private fun Caption(text: String) { Text(text, fontSize = 11.sp, color = Muted) }
 @Composable private fun LocalIcon(@DrawableRes id: Int, size: Int) { Image(painterResource(id), null, Modifier.size(size.dp)) }
-private fun Modifier.frame(color: Color, radius: Int): Modifier { val shape = RoundedCornerShape(radius.dp); return drawBehind { drawRoundRect(Ink, Offset(2.dp.toPx(), 3.dp.toPx()), size, CornerRadius(radius.dp.toPx())) }.background(color, shape).border(2.dp, Ink, shape) }
+private fun Modifier.frame(color: Color, radius: Int): Modifier { val shape = RoundedCornerShape(radius.dp); return background(color, shape).border(1.dp, TxRefresh.Border, shape) }
 private fun deliveryMoney(centavos: Long): String = "₱" + String.format(Locale.US, "%,d.%02d", centavos / 100, centavos % 100)

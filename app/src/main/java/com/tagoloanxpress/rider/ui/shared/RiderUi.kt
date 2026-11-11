@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.tagoloanxpress.R
+import com.tagoloanxpress.ui.designsystem.TxRefresh
+import com.tagoloanxpress.ui.designsystem.TxRefreshButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,36 +35,34 @@ import java.io.File
 import java.io.IOException
 import java.util.UUID
 
-val TxInk = Color(0xFF18181F)
-val TxAmber = Color(0xFFFEBC20)
-val TxCream = Color(0xFFFFFDF5)
-val TxGreen = Color(0xFF2E7D32)
+val TxInk = TxRefresh.Ink
+val TxAmber = TxRefresh.Amber
+val TxCream = TxRefresh.Background
+val TxGreen = TxRefresh.Green
 
 /** Standalone screen: bounded viewport with exactly one vertical scroller. */
 @Composable
 fun RiderPage(title: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     BackHandler(onBack = onBack)
     Column(Modifier.fillMaxSize().background(TxCream).safeDrawingPadding().imePadding()) {
-        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { TxAsset(R.drawable.rider_back, "Back") }
             Text(title, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = TxInk, modifier = Modifier.weight(1f))
         }
-        HorizontalDivider(color = TxInk, thickness = 2.dp)
+        HorizontalDivider(color = TxRefresh.Border)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
     }
 }
 
 @Composable fun TxPanel(color: Color = Color.White, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().background(color, RoundedCornerShape(16.dp)).border(2.dp, TxInk, RoundedCornerShape(16.dp)).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    Column(Modifier.fillMaxWidth().background(color, TxRefresh.CardShape).border(1.dp, TxRefresh.Border, TxRefresh.CardShape).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
 }
 
 @Composable fun TxTitle(text: String) { Text(text, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = TxInk) }
 @Composable fun TxText(text: String) { Text(text, fontSize = 13.sp, lineHeight = 19.sp, color = TxInk) }
 @Composable fun TxCaption(text: String) { Text(text, fontSize = 11.sp, color = Color(0xFF555555)) }
 @Composable fun TxButton(text: String, enabled: Boolean = true, white: Boolean = false, onClick: () -> Unit) {
-    Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).border(2.dp, if (enabled) TxInk else Color.Gray, RoundedCornerShape(14.dp)), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = if (white) Color.White else TxAmber, contentColor = TxInk)) {
-        Text(text, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
-    }
+    TxRefreshButton(text, onClick, enabled = enabled, secondary = white)
 }
 @Composable fun TxRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {

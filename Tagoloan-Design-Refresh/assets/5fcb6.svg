@@ -1,0 +1,19 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="120" height="90" viewBox="0 0 120 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="logo-mark-rider">
+<path id="Vector" d="M64 87C84.9868 87 102 69.9868 102 49C102 28.0132 84.9868 11 64 11C43.0132 11 26 28.0132 26 49C26 69.9868 43.0132 87 64 87Z" fill="#18181F"/>
+<path id="Vector_2" d="M60 83C80.9868 83 98 65.9868 98 45C98 24.0132 80.9868 7 60 7C39.0132 7 22 24.0132 22 45C22 65.9868 39.0132 83 60 83Z" fill="white" stroke-width="3" stroke="#18181F"/>
+<g id="Group">
+<path id="Vector_3" d="M82 57.1C82 61.3526 78.5526 64.8 74.3 64.8C70.0474 64.8 66.6 61.3526 66.6 57.1C66.6 52.8474 70.0474 49.4 74.3 49.4C78.5526 49.4 82 52.8474 82 57.1Z" stroke-width="3.52" stroke-linecap="round" stroke-linejoin="round" stroke="#18181F"/>
+<path id="Vector_4" d="M53.4 57.1C53.4 61.3526 49.9526 64.8 45.7 64.8C41.4474 64.8 38 61.3526 38 57.1C38 52.8474 41.4474 49.4 45.7 49.4C49.9526 49.4 53.4 52.8474 53.4 57.1Z" stroke-width="3.52" stroke-linecap="round" stroke-linejoin="round" stroke="#18181F"/>
+<path id="Vector_5" d="M66.6 31.8C67.815 31.8 68.8 30.815 68.8 29.6C68.8 28.385 67.815 27.4 66.6 27.4C65.385 27.4 64.4 28.385 64.4 29.6C64.4 30.815 65.385 31.8 66.6 31.8Z" fill="#18181F" stroke-width="3.52" stroke-linecap="round" stroke-linejoin="round" stroke="#18181F"/>
+<path id="Vector_6" d="M60 57.1V49.4L53.4 42.8L62.2 36.2L66.6 42.8H71" stroke-width="3.52" stroke-linecap="round" stroke-linejoin="round" stroke="#18181F"/>
+</g>
+<path id="Vector_7" d="M96 35C104.284 35 111 28.2843 111 20C111 11.7157 104.284 5 96 5C87.7157 5 81 11.7157 81 20C81 28.2843 87.7157 35 96 35Z" fill="#18181F" stroke-width="2" stroke="#FEBC20"/>
+<g id="Group_2">
+<path id="Vector_8" d="M92.625 14.2025L99.375 18.065" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#FEBC20"/>
+<path id="Vector_9" d="M102.75 17C102.75 16.737 102.68 16.4786 102.549 16.2509C102.417 16.0231 102.228 15.834 102 15.7025L96.75 12.7025C96.522 12.5708 96.2633 12.5015 96 12.5015C95.7367 12.5015 95.478 12.5708 95.25 12.7025L90 15.7025C89.7722 15.834 89.583 16.0231 89.4513 16.2509C89.3197 16.4786 89.2503 16.737 89.25 17V23C89.2503 23.263 89.3197 23.5214 89.4513 23.7491C89.583 23.9769 89.7722 24.166 90 24.2975L95.25 27.2975C95.478 27.4292 95.7367 27.4985 96 27.4985C96.2633 27.4985 96.522 27.4292 96.75 27.2975L102 24.2975C102.228 24.166 102.417 23.9769 102.549 23.7491C102.68 23.5214 102.75 23.263 102.75 23V17Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#FEBC20"/>
+<path id="Vector_10" d="M89.475 16.25L96 20L102.525 16.25" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#FEBC20"/>
+<path id="Vector_11" d="M96 27.5V20" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#FEBC20"/>
+</g>
+</g>
+</svg>

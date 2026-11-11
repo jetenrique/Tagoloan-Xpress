@@ -1,0 +1,344 @@
+[
+  {
+    "node_id": "3:2",
+    "name": "Welcome / portal selection",
+    "source": "app/src/main/java/com/tagoloanxpress/ui/welcome/WelcomePortalScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_2.tsx",
+    "reference_screenshot": "references/node_3_2.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-2"
+  },
+  {
+    "node_id": "3:45",
+    "name": "Customer login",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/login/CustomerLoginScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_45.tsx",
+    "reference_screenshot": "references/node_3_45.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-45"
+  },
+  {
+    "node_id": "3:98",
+    "name": "Customer registration",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/register/CustomerRegistrationScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_98.tsx",
+    "reference_screenshot": "references/node_3_98.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-98"
+  },
+  {
+    "node_id": "3:257",
+    "name": "Customer Home",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/dashboard/CustomerDashboardScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_257.tsx",
+    "reference_screenshot": "references/node_3_257.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-257"
+  },
+  {
+    "node_id": "3:423",
+    "name": "Create Pasugo \u2013 item and payment",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/create/CreatePasugoStep1Screen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_423.tsx",
+    "reference_screenshot": "references/node_3_423.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-423"
+  },
+  {
+    "node_id": "3:629",
+    "name": "Pickup location",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/create/CreatePasugoStep2Screen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_629.tsx",
+    "reference_screenshot": "references/node_3_629.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-629"
+  },
+  {
+    "node_id": "3:810",
+    "name": "Drop-off location",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/create/CreatePasugoStep3Screen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_810.tsx",
+    "reference_screenshot": "references/node_3_810.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-810"
+  },
+  {
+    "node_id": "3:993",
+    "name": "Review request",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/create/CreatePasugoStep4Screen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_993.tsx",
+    "reference_screenshot": "references/node_3_993.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-993"
+  },
+  {
+    "node_id": "3:1183",
+    "name": "Post request confirmation dialog",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/create/CreatePasugoStep4Screen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_1183.tsx",
+    "reference_screenshot": "references/node_3_1183.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-1183"
+  },
+  {
+    "node_id": "3:2503",
+    "name": "Finding a rider",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/create/PasugoLiveDispatchScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_2503.tsx",
+    "reference_screenshot": "references/node_3_2503.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-2503"
+  },
+  {
+    "node_id": "3:1336",
+    "name": "Rider found",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/create/PasugoLiveDispatchScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_1336.tsx",
+    "reference_screenshot": "references/node_3_1336.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-1336"
+  },
+  {
+    "node_id": "3:5031",
+    "name": "Customer Active tracking with SMS",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/tracking/CustomerActiveTrackingScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_5031.tsx",
+    "reference_screenshot": "references/node_3_5031.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-5031"
+  },
+  {
+    "node_id": "3:3200",
+    "name": "Customer completion/rating",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/receipt/CustomerReceiptReviewScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_3200.tsx",
+    "reference_screenshot": "references/node_3_3200.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-3200"
+  },
+  {
+    "node_id": "3:4466",
+    "name": "Customer history",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/history/CustomerHistoryScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_4466.tsx",
+    "reference_screenshot": "references/node_3_4466.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-4466"
+  },
+  {
+    "node_id": "3:4684",
+    "name": "Customer receipt",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/receipt/CustomerViewReceiptScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_4684.tsx",
+    "reference_screenshot": "references/node_3_4684.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-4684"
+  },
+  {
+    "node_id": "3:4156",
+    "name": "Customer profile",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/profile/CustomerProfileScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_4156.tsx",
+    "reference_screenshot": "references/node_3_4156.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-4156"
+  },
+  {
+    "node_id": "3:1464",
+    "name": "Rider login",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/login/RiderLoginScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_1464.tsx",
+    "reference_screenshot": "references/node_3_1464.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-1464"
+  },
+  {
+    "node_id": "3:1563",
+    "name": "Rider application/documents",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/onboarding/RiderOnboardingScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_1563.tsx",
+    "reference_screenshot": "references/node_3_1563.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-1563"
+  },
+  {
+    "node_id": "3:1701",
+    "name": "Rider verification progress",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/onboarding/RiderOnboardingScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_1701.tsx",
+    "reference_screenshot": "references/node_3_1701.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-1701"
+  },
+  {
+    "node_id": "3:1809",
+    "name": "Rider approved",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/onboarding/RiderOnboardingScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_1809.tsx",
+    "reference_screenshot": "references/node_3_1809.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-1809"
+  },
+  {
+    "node_id": "3:1913",
+    "name": "Rider profile photo setup",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/onboarding/RiderOnboardingScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_1913.tsx",
+    "reference_screenshot": "references/node_3_1913.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-1913"
+  },
+  {
+    "node_id": "3:2022",
+    "name": "Rider Home/Requests",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/dashboard/RiderDashboardScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_2022.tsx",
+    "reference_screenshot": "references/node_3_2022.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-2022"
+  },
+  {
+    "node_id": "3:2226",
+    "name": "Rider request details",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/delivery/RiderDeliveryScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_2226.tsx",
+    "reference_screenshot": "references/node_3_2226.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-2226"
+  },
+  {
+    "node_id": "3:2364",
+    "name": "Accept request confirmation dialog",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/delivery/RiderDeliveryScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_2364.tsx",
+    "reference_screenshot": "references/node_3_2364.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-2364"
+  },
+  {
+    "node_id": "3:2648",
+    "name": "Rider Active / to store / delivering",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/delivery/RiderDeliveryScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_2648.tsx",
+    "reference_screenshot": "references/node_3_2648.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-2648"
+  },
+  {
+    "node_id": "3:2847",
+    "name": "Rider receipt/actual cost",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/receipt/RiderStoreReceiptScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_2847.tsx",
+    "reference_screenshot": "references/node_3_2847.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-2847"
+  },
+  {
+    "node_id": "3:3017",
+    "name": "Rider arrived/completion",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/delivery/RiderCompletionScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_3017.tsx",
+    "reference_screenshot": "references/node_3_3017.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-3017"
+  },
+  {
+    "node_id": "3:4934",
+    "name": "Rider no active delivery",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/dashboard/RiderDashboardScreen.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_4934.tsx",
+    "reference_screenshot": "references/node_3_4934.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-4934"
+  },
+  {
+    "node_id": "26:2",
+    "name": "Rider history",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/history/RiderHistoryScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_26_2.tsx",
+    "reference_screenshot": "references/node_26_2.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=26-2"
+  },
+  {
+    "node_id": "26:3",
+    "name": "Rider trip log",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/history/RiderHistoryScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_26_3.tsx",
+    "reference_screenshot": "references/node_26_3.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=26-3"
+  },
+  {
+    "node_id": "3:4288",
+    "name": "Rider profile",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/profile/RiderProfileScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_4288.tsx",
+    "reference_screenshot": "references/node_3_4288.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-4288"
+  },
+  {
+    "node_id": "3:5251",
+    "name": "Customer in-app chat",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/messages/CustomerChatScreen.kt",
+    "source_exists_in_baseline": false,
+    "reference_code": "references/node_3_5251.tsx",
+    "reference_screenshot": "references/node_3_5251.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-5251"
+  },
+  {
+    "node_id": "3:5513",
+    "name": "Customer SMS conversation reference",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/messages/CustomerChatScreen.kt",
+    "source_exists_in_baseline": false,
+    "reference_code": "references/node_3_5513.tsx",
+    "reference_screenshot": "references/node_3_5513.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-5513"
+  },
+  {
+    "node_id": "3:5368",
+    "name": "Rider in-app chat",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/messages/RiderCommunicationScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_5368.tsx",
+    "reference_screenshot": "references/node_3_5368.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-5368"
+  },
+  {
+    "node_id": "3:5644",
+    "name": "Rider SMS fallback",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/messages/RiderCommunicationScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_5644.tsx",
+    "reference_screenshot": "references/node_3_5644.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-5644"
+  },
+  {
+    "node_id": "3:5733",
+    "name": "Rider SMS conversation reference",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/messages/RiderCommunicationScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_5733.tsx",
+    "reference_screenshot": "references/node_3_5733.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-5733"
+  },
+  {
+    "node_id": "3:5861",
+    "name": "Customer notification preview",
+    "source": "app/src/main/java/com/tagoloanxpress/customer/ui/messages/CustomerNotificationsScreen.kt",
+    "source_exists_in_baseline": false,
+    "reference_code": "references/node_3_5861.tsx",
+    "reference_screenshot": "references/node_3_5861.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-5861"
+  },
+  {
+    "node_id": "3:6067",
+    "name": "Rider notification preview",
+    "source": "app/src/main/java/com/tagoloanxpress/rider/ui/messages/RiderCommunicationScreens.kt",
+    "source_exists_in_baseline": true,
+    "reference_code": "references/node_3_6067.tsx",
+    "reference_screenshot": "references/node_3_6067.png",
+    "figma_url": "https://www.figma.com/design/EUvp0N9RXBWgczCV92ok3f/Tagoloan-Express?node-id=3-6067"
+  }
+]

@@ -34,13 +34,14 @@ import com.tagoloanxpress.customer.ui.receipt.CustomerReceiptReviewScreen
 import com.tagoloanxpress.customer.ui.receipt.CustomerViewReceiptScreen
 import com.tagoloanxpress.customer.ui.tracking.CustomerActiveTrackingScreen
 import com.tagoloanxpress.rider.RiderPortal
+import com.tagoloanxpress.ui.designsystem.TxRefreshTheme
 import com.tagoloanxpress.ui.welcome.WelcomePortalScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { TagoloanApp() }
+        setContent { TxRefreshTheme { TagoloanApp() } }
     }
 }
 
